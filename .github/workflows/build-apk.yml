@@ -1,0 +1,63 @@
+name: Build KothaFinder APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.5'
+          channel: stable
+          cache: true
+
+      - name: Create Flutter Android project
+        run: |
+          mkdir -p build_app
+          flutter create --project-name kothafinder_nepal --platforms=android build_app
+
+      - name: Copy project files
+        run: |
+          cp pubspec.yaml build_app/pubspec.yaml
+          cp firebase_options.dart build_app/lib/firebase_options.dart
+          cp main.dart build_app/lib/main.dart
+
+          mkdir -p build_app/lib/services
+          mkdir -p build_app/lib/screens
+          mkdir -p build_app/lib/models
+
+          cp app_services.dart build_app/lib/services/app_services.dart
+
+          cp auth.dart build_app/lib/screens/auth.dart
+          cp customer.dart build_app/lib/screens/customer.dart
+          cp landlord.dart build_app/lib/screens/landlord.dart
+          cp chat.dart build_app/lib/screens/chat.dart
+          cp map_search.dart build_app/lib/screens/map_search.dart
+          cp post_room.dart build_app/lib/screens/post_room.dart
+          cp room_detail.dart build_app/lib/screens/room_detail.dart
+
+          cp room.dart build_app/lib/models/room.dart
+
+      - name: Get Flutter packages
+        working-directory: build_app
+        run: flutter pub get
+
+      - name: Build release APK
+        working-directory: build_app
+        run: flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: KothaFinder-APK
+          path: build_app/build/app/outputs/flutter-apk/app-release.apk
