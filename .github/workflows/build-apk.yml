@@ -49,7 +49,6 @@ jobs:
           )
 
           path.write_text(text)
-
           print("Application ID configured.")
           PY
 
@@ -78,7 +77,6 @@ jobs:
           )
 
           path.write_text(text)
-
           print("Minimum Android SDK configured to 23.")
           PY
 
@@ -87,10 +85,7 @@ jobs:
         run: |
           echo "Checking Android configuration..."
 
-          echo "Application ID:"
           grep -n "applicationId" android/app/build.gradle || true
-
-          echo "Minimum SDK:"
           grep -n "minSdk" android/app/build.gradle || true
 
           if grep -q 'com.kothafinder.nepal' android/app/build.gradle; then
@@ -677,102 +672,570 @@ jobs:
             }
           }
 
-          class CustomerDashboard extends StatelessWidget {
+          class CustomerDashboard extends StatefulWidget {
             const CustomerDashboard({super.key});
+
+            @override
+            State<CustomerDashboard> createState() =>
+                _CustomerDashboardState();
+          }
+
+          class _CustomerDashboardState
+              extends State<CustomerDashboard> {
+            final searchController = TextEditingController();
+
+            String selectedType = 'All';
+            String selectedFurnished = 'All';
+
+            double minRent = 0;
+            double maxRent = 100000;
+
+            int minimumBedrooms = 0;
+            bool availableOnly = true;
 
             Future<void> logout() async {
               await FirebaseAuth.instance.signOut();
             }
 
             @override
+            void dispose() {
+              searchController.dispose();
+              super.dispose();
+            }
+
+            bool matchesFilters(
+              Map<String, dynamic> data,
+            ) {
+              final search =
+                  searchController.text.trim().toLowerCase();
+
+              final title =
+                  (data['title'] ?? '').toString().toLowerCase();
+
+              final location =
+                  (data['location'] ?? '').toString().toLowerCase();
+
+              final propertyType =
+                  (data['propertyType'] ?? '').toString();
+
+              final furnished =
+                  (data['furnished'] ?? '').toString();
+
+              final rentValue = data['rent'];
+
+              final rent = rentValue is num
+                  ? rentValue.toDouble()
+                  : 0.0;
+
+              final bedroomsValue = data['bedrooms'];
+
+              final bedrooms = bedroomsValue is num
+                  ? bedroomsValue.toInt()
+                  : 0;
+
+              final available =
+                  data['available'] == true;
+
+              if (search.isNotEmpty &&
+                  !title.contains(search) &&
+                  !location.contains(search)) {
+                return false;
+              }
+
+              if (selectedType != 'All' &&
+                  propertyType != selectedType) {
+                return false;
+              }
+
+              if (selectedFurnished != 'All' &&
+                  furnished != selectedFurnished) {
+                return false;
+              }
+
+              if (rent < minRent ||
+                  rent > maxRent) {
+                return false;
+              }
+
+              if (bedrooms < minimumBedrooms) {
+                return false;
+              }
+
+              if (availableOnly &&
+                  !available) {
+                return false;
+              }
+
+              return true;
+            }
+
+            void openFilters() {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                builder: (context) {
+                  return StatefulBuilder(
+                    builder: (context, setModalState) {
+                      return Padding(
+                        padding: EdgeInsets.only(
+                          left: 20,
+                          right: 20,
+                          top: 20,
+                          bottom:
+                              MediaQuery.of(context)
+                                  .viewInsets
+                                  .bottom +
+                              20,
+                        ),
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    'Filters',
+                                    style: TextStyle(
+                                      fontSize: 24,
+                                      fontWeight:
+                                          FontWeight.bold,
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: () {
+                                      setModalState(() {
+                                        selectedType =
+                                            'All';
+                                        selectedFurnished =
+                                            'All';
+                                        minRent = 0;
+                                        maxRent =
+                                            100000;
+                                        minimumBedrooms =
+                                            0;
+                                        availableOnly =
+                                            true;
+                                      });
+                                      setState(() {});
+                                    },
+                                    child:
+                                        const Text('Reset'),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 20),
+
+                              const Text(
+                                'Property Type',
+                                style: TextStyle(
+                                  fontWeight:
+                                      FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+
+                              DropdownButtonFormField<String>(
+                                value: selectedType,
+                                decoration:
+                                    const InputDecoration(
+                                  border:
+                                      OutlineInputBorder(),
+                                ),
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: 'All',
+                                    child:
+                                        Text('All'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'Room',
+                                    child:
+                                        Text('Room'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: '1BHK',
+                                    child:
+                                        Text('1BHK'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: '2BHK',
+                                    child:
+                                        Text('2BHK'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'Flat',
+                                    child:
+                                        Text('Flat'),
+                                  ),
+                                ],
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    setModalState(() {
+                                      selectedType =
+                                          value;
+                                    });
+                                    setState(() {});
+                                  }
+                                },
+                              ),
+
+                              const SizedBox(height: 20),
+
+                              const Text(
+                                'Furnished',
+                                style: TextStyle(
+                                  fontWeight:
+                                      FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+
+                              DropdownButtonFormField<String>(
+                                value:
+                                    selectedFurnished,
+                                decoration:
+                                    const InputDecoration(
+                                  border:
+                                      OutlineInputBorder(),
+                                ),
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: 'All',
+                                    child:
+                                        Text('All'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value:
+                                        'Furnished',
+                                    child:
+                                        Text('Furnished'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value:
+                                        'Unfurnished',
+                                    child:
+                                        Text('Unfurnished'),
+                                  ),
+                                ],
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    setModalState(() {
+                                      selectedFurnished =
+                                          value;
+                                    });
+                                    setState(() {});
+                                  }
+                                },
+                              ),
+
+                              const SizedBox(height: 20),
+
+                              const Text(
+                                'Minimum Bedrooms',
+                                style: TextStyle(
+                                  fontWeight:
+                                      FontWeight.bold,
+                                ),
+                              ),
+
+                              DropdownButtonFormField<int>(
+                                value:
+                                    minimumBedrooms,
+                                decoration:
+                                    const InputDecoration(
+                                  border:
+                                      OutlineInputBorder(),
+                                ),
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: 0,
+                                    child:
+                                        Text('Any'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 1,
+                                    child:
+                                        Text('1+'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 2,
+                                    child:
+                                        Text('2+'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 3,
+                                    child:
+                                        Text('3+'),
+                                  ),
+                                ],
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    setModalState(() {
+                                      minimumBedrooms =
+                                          value;
+                                    });
+                                    setState(() {});
+                                  }
+                                },
+                              ),
+
+                              const SizedBox(height: 20),
+
+                              Text(
+                                'Maximum Rent: Rs. ${maxRent.toStringAsFixed(0)}',
+                                style: const TextStyle(
+                                  fontWeight:
+                                      FontWeight.bold,
+                                ),
+                              ),
+
+                              RangeSlider(
+                                min: 0,
+                                max: 100000,
+                                divisions: 100,
+                                values: RangeValues(
+                                  minRent,
+                                  maxRent,
+                                ),
+                                labels: RangeLabels(
+                                  'Rs. ${minRent.toStringAsFixed(0)}',
+                                  'Rs. ${maxRent.toStringAsFixed(0)}',
+                                ),
+                                onChanged:
+                                    (values) {
+                                  setModalState(() {
+                                    minRent =
+                                        values.start;
+                                    maxRent =
+                                        values.end;
+                                  });
+                                  setState(() {});
+                                },
+                              ),
+
+                              SwitchListTile(
+                                title: const Text(
+                                  'Available properties only',
+                                ),
+                                value:
+                                    availableOnly,
+                                onChanged: (value) {
+                                  setModalState(() {
+                                    availableOnly =
+                                        value;
+                                  });
+                                  setState(() {});
+                                },
+                              ),
+
+                              const SizedBox(height: 10),
+
+                              SizedBox(
+                                width:
+                                    double.infinity,
+                                height: 50,
+                                child:
+                                    ElevatedButton(
+                                  onPressed: () {
+                                    Navigator.pop(
+                                        context);
+                                  },
+                                  child:
+                                      const Text(
+                                    'Apply Filters',
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              );
+            }
+
+            @override
             Widget build(BuildContext context) {
               return Scaffold(
                 appBar: AppBar(
-                  title: const Text('KothaFinder'),
+                  title:
+                      const Text('KothaFinder'),
                   actions: [
                     IconButton(
                       onPressed: logout,
-                      icon: const Icon(Icons.logout),
+                      icon:
+                          const Icon(Icons.logout),
                     ),
                   ],
                 ),
-                body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                body: StreamBuilder<
+                    QuerySnapshot<
+                        Map<String, dynamic>>>(
                   stream: FirebaseFirestore.instance
                       .collection('properties')
-                      .where('available', isEqualTo: true)
                       .snapshots(),
-                  builder: (context, snapshot) {
+                  builder:
+                      (context, snapshot) {
                     if (snapshot.connectionState ==
                         ConnectionState.waiting) {
                       return const Center(
-                        child: CircularProgressIndicator(),
+                        child:
+                            CircularProgressIndicator(),
                       );
                     }
 
                     if (snapshot.hasError) {
                       return Center(
                         child: Padding(
-                          padding: const EdgeInsets.all(20),
+                          padding:
+                              const EdgeInsets.all(
+                            20,
+                          ),
                           child: Text(
                             'Unable to load properties.\n\n${snapshot.error}',
-                            textAlign: TextAlign.center,
+                            textAlign:
+                                TextAlign.center,
                           ),
                         ),
                       );
                     }
 
-                    final properties = snapshot.data?.docs ?? [];
+                    final allProperties =
+                        snapshot.data?.docs ?? [];
+
+                    final properties =
+                        allProperties.where(
+                      (document) {
+                        return matchesFilters(
+                          document.data(),
+                        );
+                      },
+                    ).toList();
 
                     return ListView(
-                      padding: const EdgeInsets.all(20),
+                      padding:
+                          const EdgeInsets.all(20),
                       children: [
                         const Text(
                           'Find Your New Home',
                           style: TextStyle(
                             fontSize: 28,
-                            fontWeight: FontWeight.bold,
+                            fontWeight:
+                                FontWeight.bold,
                           ),
                         ),
                         const SizedBox(height: 8),
                         const Text(
                           'Rooms, flats and apartments across Nepal.',
                         ),
-                        const SizedBox(height: 25),
+                        const SizedBox(height: 20),
+
                         TextField(
-                          decoration: InputDecoration(
-                            hintText: 'Search location...',
+                          controller:
+                              searchController,
+                          onChanged: (_) {
+                            setState(() {});
+                          },
+                          decoration:
+                              InputDecoration(
+                            hintText:
+                                'Search location or property...',
                             prefixIcon:
-                                const Icon(Icons.search),
-                            border: OutlineInputBorder(
+                                const Icon(
+                              Icons.search,
+                            ),
+                            suffixIcon:
+                                searchController
+                                        .text
+                                        .isNotEmpty
+                                    ? IconButton(
+                                        onPressed:
+                                            () {
+                                          searchController
+                                              .clear();
+                                          setState(
+                                              () {});
+                                        },
+                                        icon:
+                                            const Icon(
+                                          Icons.clear,
+                                        ),
+                                      )
+                                    : null,
+                            border:
+                                OutlineInputBorder(
                               borderRadius:
-                                  BorderRadius.circular(15),
+                                  BorderRadius
+                                      .circular(15),
                             ),
                           ),
                         ),
-                        const SizedBox(height: 25),
+
+                        const SizedBox(height: 12),
+
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed:
+                                openFilters,
+                            icon: const Icon(
+                              Icons.filter_list,
+                            ),
+                            label: const Text(
+                              'Filters',
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        Text(
+                          '${properties.length} properties found',
+                          style:
+                              const TextStyle(
+                            fontSize: 16,
+                            fontWeight:
+                                FontWeight.w600,
+                          ),
+                        ),
+
+                        const SizedBox(height: 12),
+
                         if (properties.isEmpty)
                           const Card(
                             child: Padding(
-                              padding: EdgeInsets.all(25),
+                              padding:
+                                  EdgeInsets.all(25),
                               child: Column(
                                 children: [
                                   Icon(
-                                    Icons.home_work_outlined,
+                                    Icons.search_off,
                                     size: 55,
                                   ),
-                                  SizedBox(height: 12),
+                                  SizedBox(
+                                      height: 12),
                                   Text(
-                                    'No properties available yet.',
-                                    style: TextStyle(
+                                    'No properties found.',
+                                    style:
+                                        TextStyle(
                                       fontSize: 18,
                                       fontWeight:
-                                          FontWeight.bold,
+                                          FontWeight
+                                              .bold,
                                     ),
                                   ),
-                                  SizedBox(height: 5),
+                                  SizedBox(
+                                      height: 5),
                                   Text(
-                                    'New listings will appear here.',
-                                    textAlign: TextAlign.center,
+                                    'Try changing your search or filters.',
+                                    textAlign:
+                                        TextAlign
+                                            .center,
                                   ),
                                 ],
                               ),
@@ -781,10 +1244,11 @@ jobs:
                         else
                           ...properties.map(
                             (document) {
-                              final data = document.data();
-
                               return PropertyCard(
-                                data: data,
+                                documentId:
+                                    document.id,
+                                data:
+                                    document.data(),
                               );
                             },
                           ),
@@ -805,20 +1269,26 @@ jobs:
 
             @override
             Widget build(BuildContext context) {
-              final user = FirebaseAuth.instance.currentUser;
+              final user =
+                  FirebaseAuth.instance.currentUser;
 
               return Scaffold(
                 appBar: AppBar(
                   title:
-                      const Text('Landlord Dashboard'),
+                      const Text(
+                    'Landlord Dashboard',
+                  ),
                   actions: [
                     IconButton(
                       onPressed: logout,
-                      icon: const Icon(Icons.logout),
+                      icon:
+                          const Icon(Icons.logout),
                     ),
                   ],
                 ),
-                body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                body: StreamBuilder<
+                    QuerySnapshot<
+                        Map<String, dynamic>>>(
                   stream: FirebaseFirestore.instance
                       .collection('properties')
                       .where(
@@ -826,11 +1296,29 @@ jobs:
                         isEqualTo: user?.uid,
                       )
                       .snapshots(),
-                  builder: (context, snapshot) {
+                  builder:
+                      (context, snapshot) {
                     if (snapshot.connectionState ==
                         ConnectionState.waiting) {
                       return const Center(
-                        child: CircularProgressIndicator(),
+                        child:
+                            CircularProgressIndicator(),
+                      );
+                    }
+
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Padding(
+                          padding:
+                              const EdgeInsets.all(
+                            20,
+                          ),
+                          child: Text(
+                            'Unable to load your properties.\n\n${snapshot.error}',
+                            textAlign:
+                                TextAlign.center,
+                          ),
+                        ),
                       );
                     }
 
@@ -838,13 +1326,15 @@ jobs:
                         snapshot.data?.docs ?? [];
 
                     return ListView(
-                      padding: const EdgeInsets.all(20),
+                      padding:
+                          const EdgeInsets.all(20),
                       children: [
                         const Text(
                           'Landlord Dashboard',
                           style: TextStyle(
                             fontSize: 28,
-                            fontWeight: FontWeight.bold,
+                            fontWeight:
+                                FontWeight.bold,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -852,10 +1342,13 @@ jobs:
                           'Manage your properties.',
                         ),
                         const SizedBox(height: 25),
+
                         SizedBox(
-                          width: double.infinity,
+                          width:
+                              double.infinity,
                           height: 55,
-                          child: ElevatedButton.icon(
+                          child:
+                              ElevatedButton.icon(
                             onPressed: () {
                               Navigator.push(
                                 context,
@@ -866,39 +1359,48 @@ jobs:
                               );
                             },
                             icon:
-                                const Icon(Icons.add_home),
+                                const Icon(
+                              Icons.add_home,
+                            ),
                             label: const Text(
                               'Add New Property',
                             ),
                           ),
                         ),
+
                         const SizedBox(height: 30),
+
                         const Text(
                           'My Properties',
                           style: TextStyle(
                             fontSize: 22,
-                            fontWeight: FontWeight.bold,
+                            fontWeight:
+                                FontWeight.bold,
                           ),
                         ),
+
                         const SizedBox(height: 15),
+
                         if (properties.isEmpty)
                           const Card(
                             child: Padding(
-                              padding: EdgeInsets.all(20),
+                              padding:
+                                  EdgeInsets.all(20),
                               child: Text(
                                 'You have not added any properties yet.',
-                                textAlign: TextAlign.center,
+                                textAlign:
+                                    TextAlign.center,
                               ),
                             ),
                           )
                         else
                           ...properties.map(
                             (document) {
-                              final data = document.data();
-
                               return LandlordPropertyCard(
-                                documentId: document.id,
-                                data: data,
+                                documentId:
+                                    document.id,
+                                data:
+                                    document.data(),
                               );
                             },
                           ),
@@ -911,7 +1413,14 @@ jobs:
           }
 
           class AddPropertyScreen extends StatefulWidget {
-            const AddPropertyScreen({super.key});
+            const AddPropertyScreen({
+              super.key,
+              this.documentId,
+              this.existingData,
+            });
+
+            final String? documentId;
+            final Map<String, dynamic>? existingData;
 
             @override
             State<AddPropertyScreen> createState() =>
@@ -920,22 +1429,90 @@ jobs:
 
           class _AddPropertyScreenState
               extends State<AddPropertyScreen> {
-            final titleController = TextEditingController();
-            final locationController = TextEditingController();
-            final rentController = TextEditingController();
-            final discountController = TextEditingController();
-            final bedroomsController = TextEditingController();
-            final bathroomsController = TextEditingController();
-            final descriptionController = TextEditingController();
+            final titleController =
+                TextEditingController();
+
+            final locationController =
+                TextEditingController();
+
+            final rentController =
+                TextEditingController();
+
+            final discountController =
+                TextEditingController();
+
+            final bedroomsController =
+                TextEditingController();
+
+            final bathroomsController =
+                TextEditingController();
+
+            final descriptionController =
+                TextEditingController();
 
             String propertyType = 'Room';
-            String furnishedStatus = 'Unfurnished';
+            String furnishedStatus =
+                'Unfurnished';
+
             bool available = true;
             bool saving = false;
             String errorMessage = '';
 
+            @override
+            void initState() {
+              super.initState();
+
+              final data =
+                  widget.existingData;
+
+              if (data != null) {
+                titleController.text =
+                    (data['title'] ?? '')
+                        .toString();
+
+                locationController.text =
+                    (data['location'] ?? '')
+                        .toString();
+
+                rentController.text =
+                    (data['rent'] ?? '')
+                        .toString();
+
+                discountController.text =
+                    (data['discount'] ?? 0)
+                        .toString();
+
+                bedroomsController.text =
+                    (data['bedrooms'] ?? '')
+                        .toString();
+
+                bathroomsController.text =
+                    (data['bathrooms'] ?? '')
+                        .toString();
+
+                descriptionController.text =
+                    (data['description'] ?? '')
+                        .toString();
+
+                propertyType =
+                    (data['propertyType'] ??
+                            'Room')
+                        .toString();
+
+                furnishedStatus =
+                    (data['furnished'] ??
+                            'Unfurnished')
+                        .toString();
+
+                available =
+                    data['available'] == true;
+              }
+            }
+
             Future<void> saveProperty() async {
-              if (titleController.text.trim().isEmpty) {
+              if (titleController.text
+                  .trim()
+                  .isEmpty) {
                 setState(() {
                   errorMessage =
                       'Please enter a property title.';
@@ -943,7 +1520,9 @@ jobs:
                 return;
               }
 
-              if (locationController.text.trim().isEmpty) {
+              if (locationController.text
+                  .trim()
+                  .isEmpty) {
                 setState(() {
                   errorMessage =
                       'Please enter the location.';
@@ -951,7 +1530,9 @@ jobs:
                 return;
               }
 
-              if (rentController.text.trim().isEmpty) {
+              if (rentController.text
+                  .trim()
+                  .isEmpty) {
                 setState(() {
                   errorMessage =
                       'Please enter the monthly rent.';
@@ -959,26 +1540,13 @@ jobs:
                 return;
               }
 
-              if (bedroomsController.text.trim().isEmpty) {
-                setState(() {
-                  errorMessage =
-                      'Please enter the number of bedrooms.';
-                });
-                return;
-              }
-
-              if (bathroomsController.text.trim().isEmpty) {
-                setState(() {
-                  errorMessage =
-                      'Please enter the number of bathrooms.';
-                });
-                return;
-              }
-
               final rent =
-                  double.tryParse(rentController.text.trim());
+                  double.tryParse(
+                rentController.text.trim(),
+              );
 
-              if (rent == null || rent < 0) {
+              if (rent == null ||
+                  rent < 0) {
                 setState(() {
                   errorMessage =
                       'Please enter a valid rent amount.';
@@ -987,13 +1555,18 @@ jobs:
               }
 
               final discountText =
-                  discountController.text.trim();
+                  discountController.text
+                      .trim();
 
-              final discount = discountText.isEmpty
-                  ? 0.0
-                  : double.tryParse(discountText);
+              final discount =
+                  discountText.isEmpty
+                      ? 0.0
+                      : double.tryParse(
+                          discountText,
+                        );
 
-              if (discount == null || discount < 0) {
+              if (discount == null ||
+                  discount < 0) {
                 setState(() {
                   errorMessage =
                       'Please enter a valid discount.';
@@ -1003,15 +1576,18 @@ jobs:
 
               final bedrooms =
                   int.tryParse(
-                    bedroomsController.text.trim(),
-                  );
+                bedroomsController.text
+                    .trim(),
+              );
 
               final bathrooms =
                   int.tryParse(
-                    bathroomsController.text.trim(),
-                  );
+                bathroomsController.text
+                    .trim(),
+              );
 
-              if (bedrooms == null || bedrooms < 0) {
+              if (bedrooms == null ||
+                  bedrooms < 0) {
                 setState(() {
                   errorMessage =
                       'Please enter a valid number of bedrooms.';
@@ -1019,7 +1595,8 @@ jobs:
                 return;
               }
 
-              if (bathrooms == null || bathrooms < 0) {
+              if (bathrooms == null ||
+                  bathrooms < 0) {
                 setState(() {
                   errorMessage =
                       'Please enter a valid number of bathrooms.';
@@ -1028,7 +1605,8 @@ jobs:
               }
 
               final user =
-                  FirebaseAuth.instance.currentUser;
+                  FirebaseAuth.instance
+                      .currentUser;
 
               if (user == null) {
                 setState(() {
@@ -1044,39 +1622,75 @@ jobs:
               });
 
               try {
-                await FirebaseFirestore.instance
-                    .collection('properties')
-                    .add({
-                  'landlordId': user.uid,
+                final data = {
+                  'landlordId':
+                      user.uid,
                   'title':
-                      titleController.text.trim(),
-                  'propertyType': propertyType,
+                      titleController.text
+                          .trim(),
+                  'propertyType':
+                      propertyType,
                   'location':
-                      locationController.text.trim(),
+                      locationController.text
+                          .trim(),
                   'rent': rent,
-                  'discount': discount,
-                  'bedrooms': bedrooms,
-                  'bathrooms': bathrooms,
+                  'discount':
+                      discount,
+                  'bedrooms':
+                      bedrooms,
+                  'bathrooms':
+                      bathrooms,
                   'description':
-                      descriptionController.text.trim(),
+                      descriptionController
+                          .text
+                          .trim(),
                   'furnished':
                       furnishedStatus,
-                  'available': available,
-                  'createdAt':
-                      FieldValue.serverTimestamp(),
-                });
+                  'available':
+                      available,
+                };
+
+                if (widget.documentId ==
+                    null) {
+                  data['createdAt'] =
+                      FieldValue
+                          .serverTimestamp();
+
+                  await FirebaseFirestore
+                      .instance
+                      .collection(
+                          'properties')
+                      .add(data);
+                } else {
+                  data['updatedAt'] =
+                      FieldValue
+                          .serverTimestamp();
+
+                  await FirebaseFirestore
+                      .instance
+                      .collection(
+                          'properties')
+                      .doc(widget.documentId)
+                      .update(data);
+                }
 
                 if (!mounted) return;
 
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content:
-                        Text('Property added successfully.'),
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      widget.documentId ==
+                              null
+                          ? 'Property added successfully.'
+                          : 'Property updated successfully.',
+                    ),
                   ),
                 );
 
                 Navigator.pop(context);
-              } catch (e) {
+              } catch (_) {
                 setState(() {
                   errorMessage =
                       'Could not save property. Please try again.';
@@ -1104,20 +1718,30 @@ jobs:
 
             @override
             Widget build(BuildContext context) {
+              final editing =
+                  widget.documentId != null;
+
               return Scaffold(
                 appBar: AppBar(
-                  title:
-                      const Text('Add New Property'),
+                  title: Text(
+                    editing
+                        ? 'Edit Property'
+                        : 'Add New Property',
+                  ),
                 ),
-                body: SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
+                body:
+                    SingleChildScrollView(
+                  padding:
+                      const EdgeInsets.all(20),
                   child: Column(
                     children: [
                       TextField(
-                        controller: titleController,
+                        controller:
+                            titleController,
                         decoration:
                             const InputDecoration(
-                          labelText: 'Property Title',
+                          labelText:
+                              'Property Title',
                           hintText:
                               'Example: Beautiful 2BHK Flat',
                           prefixIcon:
@@ -1126,63 +1750,80 @@ jobs:
                               OutlineInputBorder(),
                         ),
                       ),
+
                       const SizedBox(height: 16),
 
-                      DropdownButtonFormField<String>(
+                      DropdownButtonFormField<
+                          String>(
                         value: propertyType,
                         decoration:
                             const InputDecoration(
-                          labelText: 'Property Type',
+                          labelText:
+                              'Property Type',
                           prefixIcon:
-                              Icon(Icons.home_work),
+                              Icon(
+                            Icons.home_work,
+                          ),
                           border:
                               OutlineInputBorder(),
                         ),
                         items: const [
                           DropdownMenuItem(
                             value: 'Room',
-                            child: Text('Room'),
+                            child:
+                                Text('Room'),
                           ),
                           DropdownMenuItem(
                             value: '1BHK',
-                            child: Text('1BHK'),
+                            child:
+                                Text('1BHK'),
                           ),
                           DropdownMenuItem(
                             value: '2BHK',
-                            child: Text('2BHK'),
+                            child:
+                                Text('2BHK'),
                           ),
                           DropdownMenuItem(
                             value: 'Flat',
-                            child: Text('Flat'),
+                            child:
+                                Text('Flat'),
                           ),
                         ],
                         onChanged: (value) {
                           if (value != null) {
                             setState(() {
-                              propertyType = value;
+                              propertyType =
+                                  value;
                             });
                           }
                         },
                       ),
+
                       const SizedBox(height: 16),
 
                       TextField(
-                        controller: locationController,
+                        controller:
+                            locationController,
                         decoration:
                             const InputDecoration(
-                          labelText: 'Location',
+                          labelText:
+                              'Location',
                           hintText:
                               'Example: Kathmandu, Baneshwor',
                           prefixIcon:
-                              Icon(Icons.location_on),
+                              Icon(
+                            Icons.location_on,
+                          ),
                           border:
                               OutlineInputBorder(),
                         ),
                       ),
+
                       const SizedBox(height: 16),
 
                       TextField(
-                        controller: rentController,
+                        controller:
+                            rentController,
                         keyboardType:
                             TextInputType.number,
                         decoration:
@@ -1191,15 +1832,19 @@ jobs:
                               'Monthly Rent (Rs.)',
                           hintText: '10000',
                           prefixIcon:
-                              Icon(Icons.currency_rupee),
+                              Icon(
+                            Icons.currency_rupee,
+                          ),
                           border:
                               OutlineInputBorder(),
                         ),
                       ),
+
                       const SizedBox(height: 16),
 
                       TextField(
-                        controller: discountController,
+                        controller:
+                            discountController,
                         keyboardType:
                             TextInputType.number,
                         decoration:
@@ -1209,11 +1854,14 @@ jobs:
                           hintText:
                               'Optional - 0',
                           prefixIcon:
-                              Icon(Icons.discount),
+                              Icon(
+                            Icons.discount,
+                          ),
                           border:
                               OutlineInputBorder(),
                         ),
                       ),
+
                       const SizedBox(height: 16),
 
                       Row(
@@ -1223,31 +1871,39 @@ jobs:
                               controller:
                                   bedroomsController,
                               keyboardType:
-                                  TextInputType.number,
+                                  TextInputType
+                                      .number,
                               decoration:
                                   const InputDecoration(
                                 labelText:
                                     'Bedrooms',
                                 prefixIcon:
-                                    Icon(Icons.bed),
+                                    Icon(
+                                  Icons.bed,
+                                ),
                                 border:
                                     OutlineInputBorder(),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(
+                            width: 12,
+                          ),
                           Expanded(
                             child: TextField(
                               controller:
                                   bathroomsController,
                               keyboardType:
-                                  TextInputType.number,
+                                  TextInputType
+                                      .number,
                               decoration:
                                   const InputDecoration(
                                 labelText:
                                     'Bathrooms',
                                 prefixIcon:
-                                    Icon(Icons.bathtub),
+                                    Icon(
+                                  Icons.bathtub,
+                                ),
                                 border:
                                     OutlineInputBorder(),
                               ),
@@ -1255,10 +1911,13 @@ jobs:
                           ),
                         ],
                       ),
+
                       const SizedBox(height: 16),
 
-                      DropdownButtonFormField<String>(
-                        value: furnishedStatus,
+                      DropdownButtonFormField<
+                          String>(
+                        value:
+                            furnishedStatus,
                         decoration:
                             const InputDecoration(
                           labelText:
@@ -1270,14 +1929,18 @@ jobs:
                         ),
                         items: const [
                           DropdownMenuItem(
-                            value: 'Furnished',
-                            child:
-                                Text('Furnished'),
+                            value:
+                                'Furnished',
+                            child: Text(
+                              'Furnished',
+                            ),
                           ),
                           DropdownMenuItem(
-                            value: 'Unfurnished',
-                            child:
-                                Text('Unfurnished'),
+                            value:
+                                'Unfurnished',
+                            child: Text(
+                              'Unfurnished',
+                            ),
                           ),
                         ],
                         onChanged: (value) {
@@ -1289,6 +1952,7 @@ jobs:
                           }
                         },
                       ),
+
                       const SizedBox(height: 16),
 
                       TextField(
@@ -1302,17 +1966,23 @@ jobs:
                           hintText:
                               'Describe your property...',
                           prefixIcon:
-                              Icon(Icons.description),
+                              Icon(
+                            Icons.description,
+                          ),
                           border:
                               OutlineInputBorder(),
-                          alignLabelWithHint: true,
+                          alignLabelWithHint:
+                              true,
                         ),
                       ),
+
                       const SizedBox(height: 10),
 
                       SwitchListTile(
                         title:
-                            const Text('Available'),
+                            const Text(
+                          'Available',
+                        ),
                         subtitle: Text(
                           available
                               ? 'Customers can see this property.'
@@ -1321,15 +1991,18 @@ jobs:
                         value: available,
                         onChanged: (value) {
                           setState(() {
-                            available = value;
+                            available =
+                                value;
                           });
                         },
                       ),
 
-                      if (errorMessage.isNotEmpty)
+                      if (errorMessage
+                          .isNotEmpty)
                         Padding(
                           padding:
-                              const EdgeInsets.only(
+                              const EdgeInsets
+                                  .only(
                             top: 10,
                             bottom: 10,
                           ),
@@ -1345,13 +2018,14 @@ jobs:
                       const SizedBox(height: 15),
 
                       SizedBox(
-                        width: double.infinity,
+                        width:
+                            double.infinity,
                         height: 55,
-                        child: ElevatedButton.icon(
-                          onPressed:
-                              saving
-                                  ? null
-                                  : saveProperty,
+                        child:
+                            ElevatedButton.icon(
+                          onPressed: saving
+                              ? null
+                              : saveProperty,
                           icon: saving
                               ? const SizedBox(
                                   width: 20,
@@ -1359,13 +2033,18 @@ jobs:
                                   child:
                                       CircularProgressIndicator(),
                                 )
-                              : const Icon(
-                                  Icons.save,
+                              : Icon(
+                                  editing
+                                      ? Icons.save
+                                      : Icons
+                                          .add_home,
                                 ),
                           label: Text(
                             saving
                                 ? 'Saving...'
-                                : 'Save Property',
+                                : editing
+                                    ? 'Update Property'
+                                    : 'Save Property',
                           ),
                         ),
                       ),
@@ -1377,10 +2056,12 @@ jobs:
           }
 
           class PropertyCard extends StatelessWidget {
+            final String documentId;
             final Map<String, dynamic> data;
 
             const PropertyCard({
               super.key,
+              required this.documentId,
               required this.data,
             });
 
@@ -1397,20 +2078,13 @@ jobs:
               return value.toString();
             }
 
-            String moneyValue(String key) {
-              final value = data[key];
-
-              if (value is num) {
-                return 'Rs. ${value.toStringAsFixed(0)}';
-              }
-
-              return 'Rs. ${value ?? '0'}';
-            }
-
             @override
             Widget build(BuildContext context) {
               final title =
-                  textValue('title', 'Property');
+                  textValue(
+                'title',
+                'Property',
+              );
 
               final location =
                   textValue('location');
@@ -1419,30 +2093,34 @@ jobs:
                   textValue('propertyType');
 
               final bedrooms =
-                  textValue('bedrooms', '0');
+                  textValue(
+                'bedrooms',
+                '0',
+              );
 
               final bathrooms =
-                  textValue('bathrooms', '0');
+                  textValue(
+                'bathrooms',
+                '0',
+              );
 
               final furnished =
                   textValue('furnished');
 
-              final description =
-                  textValue('description');
-
               final rent =
-                  moneyValue('rent');
+                  data['rent'] is num
+                      ? (data['rent'] as num)
+                          .toDouble()
+                      : 0.0;
 
               final discount =
                   data['discount'] is num
-                      ? data['discount'] as num
-                      : 0;
+                      ? (data['discount'] as num)
+                          .toDouble()
+                      : 0.0;
 
               final finalRent =
-                  data['rent'] is num
-                      ? (data['rent'] as num) -
-                          discount
-                      : null;
+                  rent - discount;
 
               return Card(
                 margin:
@@ -1451,134 +2129,495 @@ jobs:
                 ),
                 clipBehavior:
                     Clip.antiAlias,
-                child: Padding(
-                  padding:
-                      const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const CircleAvatar(
-                            radius: 27,
-                            child:
-                                Icon(Icons.home),
+                child: InkWell(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            PropertyDetailsScreen(
+                          documentId:
+                              documentId,
+                          data: data,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.all(
+                      16,
+                    ),
+                    child: Column(
+                      crossAxisAlignment:
+                          CrossAxisAlignment
+                              .start,
+                      children: [
+                        Row(
+                          children: [
+                            const CircleAvatar(
+                              radius: 27,
+                              child:
+                                  Icon(Icons.home),
+                            ),
+                            const SizedBox(
+                              width: 12,
+                            ),
+                            Expanded(
+                              child: Text(
+                                title,
+                                style:
+                                    const TextStyle(
+                                  fontSize: 19,
+                                  fontWeight:
+                                      FontWeight
+                                          .bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(
+                            height: 14),
+
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.location_on,
+                              size: 19,
+                            ),
+                            const SizedBox(
+                                width: 5),
+                            Expanded(
+                              child:
+                                  Text(location),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(
+                            height: 10),
+
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _InfoChip(
+                              icon: Icons
+                                  .home_work,
+                              text: type,
+                            ),
+                            _InfoChip(
+                              icon:
+                                  Icons.bed,
+                              text:
+                                  '$bedrooms beds',
+                            ),
+                            _InfoChip(
+                              icon: Icons
+                                  .bathtub,
+                              text:
+                                  '$bathrooms baths',
+                            ),
+                            _InfoChip(
+                              icon:
+                                  Icons.chair,
+                              text:
+                                  furnished,
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(
+                            height: 15),
+
+                        Text(
+                          'Rs. ${rent.toStringAsFixed(0)}/month',
+                          style:
+                              const TextStyle(
+                            fontSize: 19,
+                            fontWeight:
+                                FontWeight.bold,
                           ),
-                          const SizedBox(
-                            width: 12,
-                          ),
-                          Expanded(
+                        ),
+
+                        if (discount > 0)
+                          Padding(
+                            padding:
+                                const EdgeInsets
+                                    .only(
+                              top: 4,
+                            ),
                             child: Text(
-                              title,
+                              'Discount: Rs. ${discount.toStringAsFixed(0)} • Now Rs. ${finalRent.toStringAsFixed(0)}',
                               style:
                                   const TextStyle(
-                                fontSize: 19,
+                                color:
+                                    Colors.green,
                                 fontWeight:
-                                    FontWeight.bold,
+                                    FontWeight
+                                        .w600,
                               ),
                             ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
 
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.location_on,
-                            size: 19,
-                          ),
-                          const SizedBox(width: 5),
-                          Expanded(
+                        const SizedBox(
+                            height: 12),
+
+                        SizedBox(
+                          width:
+                              double.infinity,
+                          child:
+                              ElevatedButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      PropertyDetailsScreen(
+                                    documentId:
+                                        documentId,
+                                    data: data,
+                                  ),
+                                ),
+                              );
+                            },
                             child:
-                                Text(location),
+                                const Text(
+                              'View Property',
+                            ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+          }
 
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          _InfoChip(
-                            icon:
-                                Icons.home_work,
-                            text: type,
+          class PropertyDetailsScreen
+              extends StatelessWidget {
+            final String documentId;
+            final Map<String, dynamic> data;
+
+            const PropertyDetailsScreen({
+              super.key,
+              required this.documentId,
+              required this.data,
+            });
+
+            String textValue(
+              String key, [
+              String fallback = '',
+            ]) {
+              final value = data[key];
+
+              if (value == null) {
+                return fallback;
+              }
+
+              return value.toString();
+            }
+
+            @override
+            Widget build(BuildContext context) {
+              final title =
+                  textValue(
+                'title',
+                'Property',
+              );
+
+              final location =
+                  textValue('location');
+
+              final type =
+                  textValue('propertyType');
+
+              final bedrooms =
+                  textValue(
+                'bedrooms',
+                '0',
+              );
+
+              final bathrooms =
+                  textValue(
+                'bathrooms',
+                '0',
+              );
+
+              final furnished =
+                  textValue('furnished');
+
+              final description =
+                  textValue(
+                'description',
+                'No description provided.',
+              );
+
+              final available =
+                  data['available'] == true;
+
+              final rent =
+                  data['rent'] is num
+                      ? (data['rent'] as num)
+                          .toDouble()
+                      : 0.0;
+
+              final discount =
+                  data['discount'] is num
+                      ? (data['discount'] as num)
+                          .toDouble()
+                      : 0.0;
+
+              final finalRent =
+                  rent - discount;
+
+              return Scaffold(
+                appBar: AppBar(
+                  title:
+                      const Text(
+                    'Property Details',
+                  ),
+                ),
+                body: SingleChildScrollView(
+                  padding:
+                      const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment
+                            .start,
+                    children: [
+                      Container(
+                        height: 210,
+                        width:
+                            double.infinity,
+                        decoration:
+                            BoxDecoration(
+                          borderRadius:
+                              BorderRadius
+                                  .circular(
+                            18,
                           ),
-                          _InfoChip(
-                            icon: Icons.bed,
-                            text:
-                                '$bedrooms beds',
+                          color: Theme.of(
+                            context,
+                          )
+                              .colorScheme
+                              .surfaceContainerHighest,
+                        ),
+                        child:
+                            const Center(
+                          child: Icon(
+                            Icons.home_work,
+                            size: 80,
                           ),
-                          _InfoChip(
-                            icon:
-                                Icons.bathtub,
-                            text:
-                                '$bathrooms baths',
-                          ),
-                          _InfoChip(
-                            icon: Icons.chair,
-                            text:
-                                furnished,
-                          ),
-                        ],
+                        ),
                       ),
-                      const SizedBox(height: 15),
+
+                      const SizedBox(
+                          height: 20),
 
                       Text(
-                        rent,
+                        title,
                         style:
                             const TextStyle(
-                          fontSize: 19,
+                          fontSize: 27,
                           fontWeight:
                               FontWeight.bold,
                         ),
                       ),
 
-                      if (discount > 0 &&
-                          finalRent != null)
+                      const SizedBox(
+                          height: 10),
+
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.location_on,
+                            color:
+                                Colors.red,
+                          ),
+                          const SizedBox(
+                              width: 6),
+                          Expanded(
+                            child:
+                                Text(
+                              location,
+                              style:
+                                  const TextStyle(
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(
+                          height: 20),
+
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          _DetailChip(
+                            icon:
+                                Icons.home_work,
+                            label: type,
+                          ),
+                          _DetailChip(
+                            icon: Icons.bed,
+                            label:
+                                '$bedrooms Bedrooms',
+                          ),
+                          _DetailChip(
+                            icon:
+                                Icons.bathtub,
+                            label:
+                                '$bathrooms Bathrooms',
+                          ),
+                          _DetailChip(
+                            icon:
+                                Icons.chair,
+                            label: furnished,
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(
+                          height: 25),
+
+                      const Text(
+                        'Monthly Rent',
+                        style:
+                            TextStyle(
+                          fontSize: 15,
+                          fontWeight:
+                              FontWeight.w500,
+                        ),
+                      ),
+
+                      const SizedBox(
+                          height: 5),
+
+                      Text(
+                        'Rs. ${rent.toStringAsFixed(0)}',
+                        style:
+                            const TextStyle(
+                          fontSize: 28,
+                          fontWeight:
+                              FontWeight.bold,
+                        ),
+                      ),
+
+                      if (discount > 0)
                         Padding(
                           padding:
-                              const EdgeInsets.only(
-                            top: 4,
+                              const EdgeInsets
+                                  .only(
+                            top: 5,
                           ),
                           child: Text(
-                            'Discount: Rs. ${discount.toStringAsFixed(0)}  •  Now Rs. ${finalRent.toStringAsFixed(0)}',
+                            'Discount: Rs. ${discount.toStringAsFixed(0)}\nFinal rent: Rs. ${finalRent.toStringAsFixed(0)}',
                             style:
                                 const TextStyle(
-                              color: Colors.green,
+                              color:
+                                  Colors.green,
+                              fontSize: 16,
                               fontWeight:
                                   FontWeight.w600,
                             ),
                           ),
                         ),
 
-                      if (description.isNotEmpty)
-                        Padding(
-                          padding:
-                              const EdgeInsets.only(
-                            top: 12,
+                      const SizedBox(
+                          height: 25),
+
+                      Row(
+                        children: [
+                          Icon(
+                            available
+                                ? Icons.check_circle
+                                : Icons
+                                    .cancel,
+                            color: available
+                                ? Colors.green
+                                : Colors.red,
                           ),
-                          child: Text(
-                            description,
+                          const SizedBox(
+                              width: 8),
+                          Text(
+                            available
+                                ? 'Currently Available'
+                                : 'Currently Unavailable',
                             style:
-                                const TextStyle(
-                              height: 1.4,
+                                TextStyle(
+                              fontSize: 16,
+                              fontWeight:
+                                  FontWeight.bold,
+                              color: available
+                                  ? Colors.green
+                                  : Colors.red,
                             ),
                           ),
-                        ),
+                        ],
+                      ),
 
-                      const SizedBox(height: 10),
+                      const SizedBox(
+                          height: 25),
+
+                      const Text(
+                        'Description',
+                        style:
+                            TextStyle(
+                          fontSize: 21,
+                          fontWeight:
+                              FontWeight.bold,
+                        ),
+                      ),
+
+                      const SizedBox(
+                          height: 10),
+
+                      Text(
+                        description,
+                        style:
+                            const TextStyle(
+                          fontSize: 16,
+                          height: 1.5,
+                        ),
+                      ),
+
+                      const SizedBox(
+                          height: 30),
 
                       SizedBox(
-                        width: double.infinity,
+                        width:
+                            double.infinity,
+                        height: 55,
                         child:
-                            OutlinedButton(
-                          onPressed: () {},
-                          child: const Text(
-                            'View Property',
+                            ElevatedButton.icon(
+                          onPressed:
+                              available
+                                  ? () {
+                                      ScaffoldMessenger
+                                          .of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content:
+                                              Text(
+                                            'Contact feature will be added in the next step.',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  : null,
+                          icon: const Icon(
+                            Icons.phone,
+                          ),
+                          label: const Text(
+                            'Contact Landlord',
                           ),
                         ),
                       ),
@@ -1589,7 +2628,53 @@ jobs:
             }
           }
 
-          class _InfoChip extends StatelessWidget {
+          class _DetailChip
+              extends StatelessWidget {
+            final IconData icon;
+            final String label;
+
+            const _DetailChip({
+              required this.icon,
+              required this.label,
+            });
+
+            @override
+            Widget build(BuildContext context) {
+              return Container(
+                padding:
+                    const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration:
+                    BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .surfaceContainerHighest,
+                  borderRadius:
+                      BorderRadius.circular(
+                    12,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize:
+                      MainAxisSize.min,
+                  children: [
+                    Icon(
+                      icon,
+                      size: 18,
+                    ),
+                    const SizedBox(
+                        width: 6),
+                    Text(label),
+                  ],
+                ),
+              );
+            }
+          }
+
+          class _InfoChip
+              extends StatelessWidget {
             final IconData icon;
             final String text;
 
@@ -1606,12 +2691,15 @@ jobs:
                   horizontal: 10,
                   vertical: 7,
                 ),
-                decoration: BoxDecoration(
+                decoration:
+                    BoxDecoration(
                   color: Theme.of(context)
                       .colorScheme
                       .surfaceContainerHighest,
                   borderRadius:
-                      BorderRadius.circular(20),
+                      BorderRadius.circular(
+                    20,
+                  ),
                 ),
                 child: Row(
                   mainAxisSize:
@@ -1621,7 +2709,8 @@ jobs:
                       icon,
                       size: 16,
                     ),
-                    const SizedBox(width: 5),
+                    const SizedBox(
+                        width: 5),
                     Text(text),
                   ],
                 ),
@@ -1656,7 +2745,10 @@ jobs:
             @override
             Widget build(BuildContext context) {
               final title =
-                  textValue('title', 'Property');
+                  textValue(
+                'title',
+                'Property',
+              );
 
               final location =
                   textValue('location');
@@ -1667,7 +2759,8 @@ jobs:
               final available =
                   data['available'] == true;
 
-              final rent = data['rent'];
+              final rent =
+                  data['rent'] ?? 0;
 
               return Card(
                 margin:
@@ -1675,7 +2768,8 @@ jobs:
                   bottom: 15,
                 ),
                 child: ListTile(
-                  leading: const CircleAvatar(
+                  leading:
+                      const CircleAvatar(
                     child:
                         Icon(Icons.apartment),
                   ),
@@ -1689,35 +2783,116 @@ jobs:
                   ),
                   subtitle: Text(
                     '$type • $location\n'
-                    'Rs. ${rent ?? 0}/month • '
+                    'Rs. $rent/month • '
                     '${available ? 'Available' : 'Unavailable'}',
                   ),
                   isThreeLine: true,
-                  trailing: PopupMenuButton<String>(
-                    onSelected: (value) async {
-                      if (value == 'toggle') {
+                  trailing:
+                      PopupMenuButton<String>(
+                    onSelected:
+                        (value) async {
+                      if (value ==
+                          'edit') {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                AddPropertyScreen(
+                              documentId:
+                                  documentId,
+                              existingData:
+                                  data,
+                            ),
+                          ),
+                        );
+                      }
+
+                      if (value ==
+                          'toggle') {
                         await FirebaseFirestore
                             .instance
                             .collection(
                                 'properties')
-                            .doc(documentId)
+                            .doc(
+                              documentId,
+                            )
                             .update({
                           'available':
                               !available,
                         });
                       }
 
-                      if (value == 'delete') {
-                        await FirebaseFirestore
-                            .instance
-                            .collection(
-                                'properties')
-                            .doc(documentId)
-                            .delete();
+                      if (value ==
+                          'delete') {
+                        final confirm =
+                            await showDialog<
+                                bool>(
+                          context: context,
+                          builder:
+                              (context) {
+                            return AlertDialog(
+                              title:
+                                  const Text(
+                                'Delete Property?',
+                              ),
+                              content:
+                                  const Text(
+                                'This property will be permanently deleted.',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed:
+                                      () {
+                                    Navigator.pop(
+                                      context,
+                                      false,
+                                    );
+                                  },
+                                  child:
+                                      const Text(
+                                    'Cancel',
+                                  ),
+                                ),
+                                ElevatedButton(
+                                  onPressed:
+                                      () {
+                                    Navigator.pop(
+                                      context,
+                                      true,
+                                    );
+                                  },
+                                  child:
+                                      const Text(
+                                    'Delete',
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        );
+
+                        if (confirm ==
+                            true) {
+                          await FirebaseFirestore
+                              .instance
+                              .collection(
+                                  'properties')
+                              .doc(
+                                documentId,
+                              )
+                              .delete();
+                        }
                       }
                     },
-                    itemBuilder: (context) {
+                    itemBuilder:
+                        (context) {
                       return [
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: Text(
+                            'Edit Property',
+                          ),
+                        ),
                         PopupMenuItem(
                           value: 'toggle',
                           child: Text(
@@ -1728,8 +2903,9 @@ jobs:
                         ),
                         const PopupMenuItem(
                           value: 'delete',
-                          child:
-                              Text('Delete Property'),
+                          child: Text(
+                            'Delete Property',
+                          ),
                         ),
                       ];
                     },
