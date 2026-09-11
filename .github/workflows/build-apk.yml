@@ -38,16 +38,15 @@ jobs:
           path = Path("android/app/build.gradle")
           text = path.read_text()
 
-          old_id = "com.example.kothafinder_nepal"
-          new_id = "com.kothafinder.nepal"
+          text = text.replace(
+              'applicationId = "com.example.kothafinder_nepal"',
+              'applicationId = "com.kothafinder.nepal"'
+          )
 
-          if old_id in text:
-              text = text.replace(old_id, new_id)
-          else:
-              text = text.replace(
-                  'applicationId = "com.example.kothafinder_nepal"',
-                  'applicationId = "com.kothafinder.nepal"'
-              )
+          text = text.replace(
+              'applicationId "com.example.kothafinder_nepal"',
+              'applicationId "com.kothafinder.nepal"'
+          )
 
           path.write_text(text)
 
@@ -74,30 +73,31 @@ jobs:
         run: |
           if [ ! -f google-services.json ]; then
             echo "ERROR: google-services.json was not found."
-            echo "Make sure google-services.json is in the root of the GitHub repository."
             exit 1
           fi
 
-          mkdir -p build_app/android/app
-          cp google-services.json build_app/android/app/google-services.json
+          cp google-services.json \
+            build_app/android/app/google-services.json
 
           echo "Firebase configuration copied."
 
-      - name: Verify Firebase configuration
+      - name: Verify Firebase package
         run: |
-          echo "Checking Firebase package..."
+          echo "Checking Firebase configuration..."
 
           if grep -q '"package_name": "com.kothafinder.nepal"' google-services.json; then
-            echo "Firebase package matches com.kothafinder.nepal."
+            echo "Firebase package matches."
           else
-            echo "ERROR: Firebase package does not match com.kothafinder.nepal."
+            echo "ERROR: Firebase package does not match."
             exit 1
           fi
 
-      - name: Add Firebase Core
+      - name: Add Firebase packages
         working-directory: build_app
         run: |
           flutter pub add firebase_core
+          flutter pub add firebase_auth
+          flutter pub add cloud_firestore
 
       - name: Configure Google Services
         working-directory: build_app
@@ -139,6 +139,8 @@ jobs:
         working-directory: build_app
         run: |
           cat > lib/main.dart <<'EOF'
+          import 'package:cloud_firestore/cloud_firestore.dart';
+          import 'package:firebase_auth/firebase_auth.dart';
           import 'package:firebase_core/firebase_core.dart';
           import 'package:flutter/material.dart';
 
@@ -164,82 +166,262 @@ jobs:
                   ),
                   useMaterial3: true,
                 ),
-                home: const WelcomeScreen(),
+                home: const AuthGate(),
               );
             }
           }
 
-          class WelcomeScreen extends StatelessWidget {
-            const WelcomeScreen({super.key});
+          class AuthGate extends StatelessWidget {
+            const AuthGate({super.key});
+
+            @override
+            Widget build(BuildContext context) {
+              return StreamBuilder<User?>(
+                stream: FirebaseAuth.instance.authStateChanges(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState ==
+                      ConnectionState.waiting) {
+                    return const LoadingScreen();
+                  }
+
+                  final user = snapshot.data;
+
+                  if (user == null) {
+                    return const LoginScreen();
+                  }
+
+                  return const RoleLoadingScreen();
+                },
+              );
+            }
+          }
+
+          class LoadingScreen extends StatelessWidget {
+            const LoadingScreen({super.key});
+
+            @override
+            Widget build(BuildContext context) {
+              return const Scaffold(
+                body: Center(
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            }
+          }
+
+          class RoleLoadingScreen extends StatelessWidget {
+            const RoleLoadingScreen({super.key});
+
+            Future<String?> getRole() async {
+              final user = FirebaseAuth.instance.currentUser;
+
+              if (user == null) {
+                return null;
+              }
+
+              final document = await FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(user.uid)
+                  .get();
+
+              if (!document.exists) {
+                return null;
+              }
+
+              final data = document.data();
+
+              return data?['role'] as String?;
+            }
+
+            @override
+            Widget build(BuildContext context) {
+              return FutureBuilder<String?>(
+                future: getRole(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState ==
+                      ConnectionState.waiting) {
+                    return const LoadingScreen();
+                  }
+
+                  final role = snapshot.data;
+
+                  if (role == 'landlord') {
+                    return const LandlordDashboard();
+                  }
+
+                  if (role == 'customer') {
+                    return const CustomerDashboard();
+                  }
+
+                  return const LoginScreen();
+                },
+              );
+            }
+          }
+
+          class LoginScreen extends StatefulWidget {
+            const LoginScreen({super.key});
+
+            @override
+            State<LoginScreen> createState() => _LoginScreenState();
+          }
+
+          class _LoginScreenState extends State<LoginScreen> {
+            final emailController = TextEditingController();
+            final passwordController = TextEditingController();
+
+            bool loading = false;
+            String errorMessage = '';
+
+            Future<void> login() async {
+              setState(() {
+                loading = true;
+                errorMessage = '';
+              });
+
+              try {
+                await FirebaseAuth.instance.signInWithEmailAndPassword(
+                  email: emailController.text.trim(),
+                  password: passwordController.text.trim(),
+                );
+              } on FirebaseAuthException catch (e) {
+                setState(() {
+                  errorMessage = getFirebaseError(e.code);
+                });
+              } catch (_) {
+                setState(() {
+                  errorMessage = 'Something went wrong.';
+                });
+              } finally {
+                if (mounted) {
+                  setState(() {
+                    loading = false;
+                  });
+                }
+              }
+            }
+
+            String getFirebaseError(String code) {
+              switch (code) {
+                case 'user-not-found':
+                  return 'No account found with this email.';
+                case 'wrong-password':
+                case 'invalid-credential':
+                  return 'Incorrect email or password.';
+                case 'invalid-email':
+                  return 'Please enter a valid email.';
+                case 'too-many-requests':
+                  return 'Too many attempts. Try again later.';
+                default:
+                  return 'Login failed. Please try again.';
+              }
+            }
+
+            @override
+            void dispose() {
+              emailController.dispose();
+              passwordController.dispose();
+              super.dispose();
+            }
 
             @override
             Widget build(BuildContext context) {
               return Scaffold(
-                appBar: AppBar(
-                  title: const Text('KothaFinder Nepal'),
-                  centerTitle: true,
-                ),
-                body: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.home_work,
-                          size: 90,
-                        ),
-                        const SizedBox(height: 24),
-                        const Text(
-                          'KothaFinder Nepal',
-                          style: TextStyle(
-                            fontSize: 30,
-                            fontWeight: FontWeight.bold,
+                body: SafeArea(
+                  child: Center(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        children: [
+                          const Icon(
+                            Icons.home_work,
+                            size: 80,
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Find rooms, flats and apartments in Nepal.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 16,
+
+                          const SizedBox(height: 20),
+
+                          const Text(
+                            'KothaFinder Nepal',
+                            style: TextStyle(
+                              fontSize: 30,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 40),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
+
+                          const SizedBox(height: 8),
+
+                          const Text(
+                            'Login to continue',
+                            style: TextStyle(
+                              fontSize: 16,
+                            ),
+                          ),
+
+                          const SizedBox(height: 30),
+
+                          TextField(
+                            controller: emailController,
+                            keyboardType: TextInputType.emailAddress,
+                            decoration: const InputDecoration(
+                              labelText: 'Email',
+                              prefixIcon: Icon(Icons.email),
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          TextField(
+                            controller: passwordController,
+                            obscureText: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Password',
+                              prefixIcon: Icon(Icons.lock),
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+
+                          if (errorMessage.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              errorMessage,
+                              style: const TextStyle(
+                                color: Colors.red,
+                              ),
+                            ),
+                          ],
+
+                          const SizedBox(height: 24),
+
+                          SizedBox(
+                            width: double.infinity,
+                            height: 52,
+                            child: ElevatedButton(
+                              onPressed: loading ? null : login,
+                              child: loading
+                                  ? const CircularProgressIndicator()
+                                  : const Text('Login'),
+                            ),
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          TextButton(
                             onPressed: () {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) =>
-                                      const CustomerHomeScreen(),
+                                  builder: (_) =>
+                                      const RegisterScreen(),
                                 ),
                               );
                             },
-                            icon: const Icon(Icons.search),
-                            label: const Text('I am a Customer'),
+                            child: const Text(
+                              'Create a new account',
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      const LandlordDashboard(),
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.business),
-                            label: const Text('I am a Landlord'),
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -247,56 +429,368 @@ jobs:
             }
           }
 
-          class CustomerHomeScreen extends StatelessWidget {
-            const CustomerHomeScreen({super.key});
+          class RegisterScreen extends StatefulWidget {
+            const RegisterScreen({super.key});
+
+            @override
+            State<RegisterScreen> createState() =>
+                _RegisterScreenState();
+          }
+
+          class _RegisterScreenState
+              extends State<RegisterScreen> {
+            final nameController = TextEditingController();
+            final emailController = TextEditingController();
+            final passwordController = TextEditingController();
+
+            String role = 'customer';
+            bool loading = false;
+            String errorMessage = '';
+
+            Future<void> register() async {
+              if (nameController.text.trim().isEmpty) {
+                setState(() {
+                  errorMessage = 'Please enter your name.';
+                });
+                return;
+              }
+
+              if (passwordController.text.length < 6) {
+                setState(() {
+                  errorMessage =
+                      'Password must contain at least 6 characters.';
+                });
+                return;
+              }
+
+              setState(() {
+                loading = true;
+                errorMessage = '';
+              });
+
+              try {
+                final credential = await FirebaseAuth.instance
+                    .createUserWithEmailAndPassword(
+                  email: emailController.text.trim(),
+                  password: passwordController.text.trim(),
+                );
+
+                final user = credential.user;
+
+                if (user == null) {
+                  throw Exception('User creation failed.');
+                }
+
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(user.uid)
+                    .set({
+                  'uid': user.uid,
+                  'name': nameController.text.trim(),
+                  'email': emailController.text.trim(),
+                  'role': role,
+                  'createdAt':
+                      FieldValue.serverTimestamp(),
+                });
+              } on FirebaseAuthException catch (e) {
+                setState(() {
+                  errorMessage = getFirebaseError(e.code);
+                });
+              } catch (_) {
+                setState(() {
+                  errorMessage =
+                      'Account created, but profile setup failed.';
+                });
+              } finally {
+                if (mounted) {
+                  setState(() {
+                    loading = false;
+                  });
+                }
+              }
+            }
+
+            String getFirebaseError(String code) {
+              switch (code) {
+                case 'email-already-in-use':
+                  return 'This email is already registered.';
+                case 'invalid-email':
+                  return 'Please enter a valid email.';
+                case 'weak-password':
+                  return 'Password is too weak.';
+                default:
+                  return 'Registration failed. Please try again.';
+              }
+            }
+
+            @override
+            void dispose() {
+              nameController.dispose();
+              emailController.dispose();
+              passwordController.dispose();
+              super.dispose();
+            }
 
             @override
             Widget build(BuildContext context) {
               return Scaffold(
                 appBar: AppBar(
-                  title: const Text('Find a Property'),
+                  title: const Text('Create Account'),
+                ),
+                body: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: nameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Full Name',
+                          prefixIcon: Icon(Icons.person),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      TextField(
+                        controller: emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        decoration: const InputDecoration(
+                          labelText: 'Email',
+                          prefixIcon: Icon(Icons.email),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      TextField(
+                        controller: passwordController,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Password',
+                          prefixIcon: Icon(Icons.lock),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'I am a:',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+
+                      RadioListTile<String>(
+                        title: const Text('Customer'),
+                        value: 'customer',
+                        groupValue: role,
+                        onChanged: (value) {
+                          setState(() {
+                            role = value!;
+                          });
+                        },
+                      ),
+
+                      RadioListTile<String>(
+                        title: const Text('Landlord'),
+                        value: 'landlord',
+                        groupValue: role,
+                        onChanged: (value) {
+                          setState(() {
+                            role = value!;
+                          });
+                        },
+                      ),
+
+                      if (errorMessage.isNotEmpty)
+                        Padding(
+                          padding:
+                              const EdgeInsets.only(bottom: 15),
+                          child: Text(
+                            errorMessage,
+                            style: const TextStyle(
+                              color: Colors.red,
+                            ),
+                          ),
+                        ),
+
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton(
+                          onPressed: loading ? null : register,
+                          child: loading
+                              ? const CircularProgressIndicator()
+                              : const Text('Create Account'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+          }
+
+          class CustomerDashboard extends StatelessWidget {
+            const CustomerDashboard({super.key});
+
+            Future<void> logout() async {
+              await FirebaseAuth.instance.signOut();
+            }
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                appBar: AppBar(
+                  title: const Text('KothaFinder'),
+                  actions: [
+                    IconButton(
+                      onPressed: logout,
+                      icon: const Icon(Icons.logout),
+                    ),
+                  ],
                 ),
                 body: ListView(
                   padding: const EdgeInsets.all(20),
                   children: [
                     const Text(
-                      'Find Your Perfect Room',
+                      'Customer Dashboard',
                       style: TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
+
                     const SizedBox(height: 10),
+
                     const Text(
-                      'Search rooms, flats and apartments in Nepal.',
+                      'Find rooms, flats and apartments.',
+                      style: TextStyle(fontSize: 16),
                     ),
-                    const SizedBox(height: 24),
+
+                    const SizedBox(height: 25),
+
                     TextField(
                       decoration: InputDecoration(
                         hintText: 'Search location...',
-                        prefixIcon: const Icon(Icons.search),
+                        prefixIcon:
+                            const Icon(Icons.search),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(15),
+                          borderRadius:
+                              BorderRadius.circular(15),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 20),
+
+                    const SizedBox(height: 25),
+
                     const PropertyCard(
                       title: 'Room in Kathmandu',
                       price: 'Rs. 10,000/month',
                       location: 'Kathmandu',
                     ),
+
                     const PropertyCard(
                       title: '1BHK Apartment',
                       price: 'Rs. 18,000/month',
                       location: 'Kathmandu',
                     ),
-                    const PropertyCard(
-                      title: 'Room in Lalitpur',
-                      price: 'Rs. 8,000/month',
-                      location: 'Lalitpur',
+                  ],
+                ),
+              );
+            }
+          }
+
+          class LandlordDashboard extends StatelessWidget {
+            const LandlordDashboard({super.key});
+
+            Future<void> logout() async {
+              await FirebaseAuth.instance.signOut();
+            }
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                appBar: AppBar(
+                  title: const Text('Landlord Dashboard'),
+                  actions: [
+                    IconButton(
+                      onPressed: logout,
+                      icon: const Icon(Icons.logout),
                     ),
                   ],
+                ),
+                body: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Landlord Dashboard',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      const Text(
+                        'Manage your properties.',
+                        style: TextStyle(fontSize: 16),
+                      ),
+
+                      const SizedBox(height: 30),
+
+                      SizedBox(
+                        width: double.infinity,
+                        height: 55,
+                        child: ElevatedButton.icon(
+                          onPressed: () {},
+                          icon:
+                              const Icon(Icons.add_home),
+                          label:
+                              const Text('Add New Property'),
+                        ),
+                      ),
+
+                      const SizedBox(height: 25),
+
+                      const Text(
+                        'My Properties',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+
+                      const SizedBox(height: 15),
+
+                      const Card(
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            child:
+                                Icon(Icons.apartment),
+                          ),
+                          title:
+                              Text('My 2BHK Apartment'),
+                          subtitle: Text(
+                            'Rs. 25,000/month • Available',
+                          ),
+                          trailing:
+                              Icon(Icons.edit),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               );
             }
@@ -317,7 +811,8 @@ jobs:
             @override
             Widget build(BuildContext context) {
               return Card(
-                margin: const EdgeInsets.only(bottom: 16),
+                margin:
+                    const EdgeInsets.only(bottom: 16),
                 child: ListTile(
                   leading: const CircleAvatar(
                     child: Icon(Icons.home),
@@ -328,67 +823,40 @@ jobs:
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  subtitle: Text('$price • $location'),
+                  subtitle:
+                      Text('$price • $location'),
                   trailing: const Icon(
                     Icons.arrow_forward_ios,
                     size: 18,
                   ),
-                  onTap: () {},
                 ),
               );
             }
           }
+          EOF
 
-          class LandlordDashboard extends StatelessWidget {
-            const LandlordDashboard({super.key});
+      - name: Remove default tests
+        working-directory: build_app
+        run: |
+          rm -rf test
 
-            @override
-            Widget build(BuildContext context) {
-              return Scaffold(
-                appBar: AppBar(
-                  title: const Text('Landlord Dashboard'),
-                ),
-                body: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Landlord Dashboard',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      const Text(
-                        'Manage your properties.',
-                        style: TextStyle(
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 30),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 55,
-                        child: ElevatedButton.icon(
-                          onPressed: () {},
-                          icon: const Icon(Icons.add_home),
-                          label: const Text('Add New Property'),
-                        ),
-                      ),
-                      const SizedBox(height: 25),
-                      const Text(
-                        'My Properties',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 15),
-                      const Card(
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            child: Icon(Icons.apartment),
-                          ),
-                          title: Text('
+      - name: Get dependencies
+        working-directory: build_app
+        run: |
+          flutter pub get
+
+      - name: Analyze Flutter project
+        working-directory: build_app
+        run: |
+          flutter analyze
+
+      - name: Build release APK
+        working-directory: build_app
+        run: |
+          flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: KothaFinder-APK
+          path: build_app/build/app/outputs/flutter-apk/app-release.apk
