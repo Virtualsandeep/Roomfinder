@@ -25,7 +25,7 @@ jobs:
         run: |
           flutter create --project-name kothafinder_nepal --platforms=android build_app
 
-      - name: Copy Flutter files
+      - name: Copy project files
         run: |
           cp pubspec.yaml build_app/pubspec.yaml
 
@@ -38,105 +38,55 @@ jobs:
           if [ -f main.dart ]; then
             cp main.dart build_app/lib/main.dart
           else
-            cat > build_app/lib/main.dart <<'EOF'
-            import 'package:flutter/material.dart';
-
-            void main() {
-              runApp(const KothaFinderApp());
-            }
-
-            class KothaFinderApp extends StatelessWidget {
-              const KothaFinderApp({super.key});
-
-              @override
-              Widget build(BuildContext context) {
-                return MaterialApp(
-                  debugShowCheckedModeBanner: false,
-                  title: 'KothaFinder Nepal',
-                  theme: ThemeData(
-                    colorScheme: ColorScheme.fromSeed(
-                      seedColor: Colors.blue,
-                    ),
-                    useMaterial3: true,
-                  ),
-                  home: const HomeScreen(),
-                );
-              }
-            }
-
-            class HomeScreen extends StatelessWidget {
-              const HomeScreen({super.key});
-
-              @override
-              Widget build(BuildContext context) {
-                return Scaffold(
-                  appBar: AppBar(
-                    title: const Text('KothaFinder Nepal'),
-                  ),
-                  body: ListView(
-                    padding: const EdgeInsets.all(20),
-                    children: [
-                      const Text(
-                        'Find your room in Nepal',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.search),
-                          title: const Text('Find a Room'),
-                          subtitle: const Text(
-                            'Search rooms by location and rent',
-                          ),
-                          onTap: () {},
-                        ),
-                      ),
-
-                      Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.home_work),
-                          title: const Text('I am a Landlord'),
-                          subtitle: const Text(
-                            'Post your room for customers',
-                          ),
-                          onTap: () {},
-                        ),
-                      ),
-
-                      Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.map),
-                          title: const Text('Map Search'),
-                          subtitle: const Text(
-                            'Find rooms near you',
-                          ),
-                          onTap: () {},
-                        ),
-                      ),
-
-                      Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.favorite),
-                          title: const Text('Saved Rooms'),
-                          subtitle: const Text(
-                            'View your favourite listings',
-                          ),
-                          onTap: () {},
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }
-            }
-            EOF
+            printf '%s\n' "import 'package:flutter/material.dart'; void main() => runApp(const KothaFinderApp()); class KothaFinderApp extends StatelessWidget { const KothaFinderApp({super.key}); @override Widget build(BuildContext context) { return MaterialApp(debugShowCheckedModeBanner: false, title: 'KothaFinder Nepal', home: Scaffold(appBar: AppBar(title: const Text('KothaFinder Nepal')), body: const Center(child: Text('Find your room in Nepal')))); } }" > build_app/lib/main.dart
           fi
 
-      - name: Get packages
+          if [ -f app_services.dart ]; then
+            mkdir -p build_app/lib/services
+            cp app_services.dart build_app/lib/services/app_services.dart
+          fi
+
+          if [ -f auth.dart ]; then
+            mkdir -p build_app/lib/screens
+            cp auth.dart build_app/lib/screens/auth.dart
+          fi
+
+          if [ -f customer.dart ]; then
+            mkdir -p build_app/lib/screens
+            cp customer.dart build_app/lib/screens/customer.dart
+          fi
+
+          if [ -f landlord.dart ]; then
+            mkdir -p build_app/lib/screens
+            cp landlord.dart build_app/lib/screens/landlord.dart
+          fi
+
+          if [ -f chat.dart ]; then
+            mkdir -p build_app/lib/screens
+            cp chat.dart build_app/lib/screens/chat.dart
+          fi
+
+          if [ -f map_search.dart ]; then
+            mkdir -p build_app/lib/screens
+            cp map_search.dart build_app/lib/screens/map_search.dart
+          fi
+
+          if [ -f post_room.dart ]; then
+            mkdir -p build_app/lib/screens
+            cp post_room.dart build_app/lib/screens/post_room.dart
+          fi
+
+          if [ -f room_detail.dart ]; then
+            mkdir -p build_app/lib/screens
+            cp room_detail.dart build_app/lib/screens/room_detail.dart
+          fi
+
+          if [ -f room.dart ]; then
+            mkdir -p build_app/lib/models
+            cp room.dart build_app/lib/models/room.dart
+          fi
+
+      - name: Get Flutter packages
         working-directory: build_app
         run: flutter pub get
 
