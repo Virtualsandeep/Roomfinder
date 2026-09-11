@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -28,7 +29,7 @@ jobs:
             --platforms android \
             build_app
 
-      - name: Configure Android package
+      - name: Configure Android application ID
         working-directory: build_app
         run: |
           python3 - <<'PY'
@@ -40,54 +41,58 @@ jobs:
           old_id = "com.example.kothafinder_nepal"
           new_id = "com.kothafinder.nepal"
 
-          if old_id not in text:
-              print("Could not find the default Flutter application ID.")
-              print("Current build.gradle:")
-              print(text)
-              raise SystemExit(1)
-
-          text = text.replace(old_id, new_id)
+          if old_id in text:
+              text = text.replace(old_id, new_id)
+          else:
+              text = text.replace(
+                  'applicationId = "com.example.kothafinder_nepal"',
+                  'applicationId = "com.kothafinder.nepal"'
+              )
 
           path.write_text(text)
 
-          print("Android application ID changed successfully.")
-          print("Application ID:", new_id)
+          print("Android application ID configured.")
           PY
 
-      - name: Verify Android package
+      - name: Verify Android application ID
         working-directory: build_app
         run: |
           echo "Checking Android application ID..."
+
           grep -n "applicationId" android/app/build.gradle
 
-          if ! grep -q 'applicationId "com.kothafinder.nepal"' android/app/build.gradle; then
+          if grep -q 'applicationId = "com.kothafinder.nepal"' android/app/build.gradle; then
+            echo "Android application ID is correct."
+          elif grep -q 'applicationId "com.kothafinder.nepal"' android/app/build.gradle; then
+            echo "Android application ID is correct."
+          else
             echo "ERROR: Android application ID is incorrect."
             exit 1
           fi
 
-          echo "Android application ID is correct."
-
       - name: Copy Firebase configuration
         run: |
           if [ ! -f google-services.json ]; then
-            echo "ERROR: google-services.json was not found in repository root."
+            echo "ERROR: google-services.json was not found."
+            echo "Make sure google-services.json is in the root of the GitHub repository."
             exit 1
           fi
 
+          mkdir -p build_app/android/app
           cp google-services.json build_app/android/app/google-services.json
 
-      - name: Verify Firebase package
+          echo "Firebase configuration copied."
+
+      - name: Verify Firebase configuration
         run: |
-          echo "Checking Firebase configuration..."
+          echo "Checking Firebase package..."
 
-          grep -q '"package_name": "com.kothafinder.nepal"' google-services.json
-
-          if [ $? -ne 0 ]; then
-            echo "ERROR: Firebase configuration does not contain com.kothafinder.nepal"
+          if grep -q '"package_name": "com.kothafinder.nepal"' google-services.json; then
+            echo "Firebase package matches com.kothafinder.nepal."
+          else
+            echo "ERROR: Firebase package does not match com.kothafinder.nepal."
             exit 1
           fi
-
-          echo "Firebase package matches com.kothafinder.nepal."
 
       - name: Add Firebase Core
         working-directory: build_app
@@ -106,9 +111,9 @@ jobs:
           settings_text = settings.read_text()
           app_text = app.read_text()
 
-          google_plugin = "com.google.gms.google-services"
+          plugin = "com.google.gms.google-services"
 
-          if google_plugin not in settings_text:
+          if plugin not in settings_text:
               settings_text = settings_text.replace(
                   "plugins {",
                   """plugins {
@@ -116,7 +121,7 @@ jobs:
                   1
               )
 
-          if google_plugin not in app_text:
+          if plugin not in app_text:
               app_text = app_text.replace(
                   "plugins {",
                   """plugins {
@@ -196,7 +201,9 @@ jobs:
                         const Text(
                           'Find rooms, flats and apartments in Nepal.',
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 16),
+                          style: TextStyle(
+                            fontSize: 16,
+                          ),
                         ),
                         const SizedBox(height: 40),
                         SizedBox(
@@ -356,7 +363,9 @@ jobs:
                       const SizedBox(height: 10),
                       const Text(
                         'Manage your properties.',
-                        style: TextStyle(fontSize: 16),
+                        style: TextStyle(
+                          fontSize: 16,
+                        ),
                       ),
                       const SizedBox(height: 30),
                       SizedBox(
@@ -382,43 +391,4 @@ jobs:
                           leading: CircleAvatar(
                             child: Icon(Icons.apartment),
                           ),
-                          title: Text('My 2BHK Apartment'),
-                          subtitle: Text(
-                            'Rs. 25,000/month • Available',
-                          ),
-                          trailing: Icon(Icons.edit),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }
-          }
-          EOF
-
-      - name: Remove default tests
-        working-directory: build_app
-        run: |
-          rm -rf test
-
-      - name: Get dependencies
-        working-directory: build_app
-        run: |
-          flutter pub get
-
-      - name: Analyze Flutter project
-        working-directory: build_app
-        run: |
-          flutter analyze
-
-      - name: Build release APK
-        working-directory: build_app
-        run: |
-          flutter build apk --release
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: KothaFinder-APK
-          path: build_app/build/app/outputs/flutter-apk/app-release.apk
+                          title: Text('
