@@ -24,23 +24,56 @@ jobs:
           channel: stable
           cache: true
 
-      # 3. Create Flutter Android project
-      - name: Create Flutter Android project
+      # 3. Create Flutter project
+      - name: Create Flutter project
         run: |
           flutter create \
             --project-name kothafinder_nepal \
+            --org com.kothafinder \
             --platforms android \
             build_app
 
-      # 4. Set Android application ID
-      - name: Set Android application ID
+      # 4. Set the exact Android package ID required by Firebase
+      - name: Configure Android package
         working-directory: build_app
         run: |
-          sed -i 's/applicationId "com.example.kothafinder_nepal"/applicationId "com.kothafinder.nepal"/' android/app/build.gradle.kts
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("android/app/build.gradle")
+          text = path.read_text()
+
+          text = text.replace(
+              'namespace "com.kothafinder.kothafinder_nepal"',
+              'namespace "com.kothafinder.nepal"'
+          )
+
+          text = text.replace(
+              'applicationId "com.kothafinder.kothafinder_nepal"',
+              'applicationId "com.kothafinder.nepal"'
+          )
+
+          text = text.replace(
+              'namespace = "com.kothafinder.kothafinder_nepal"',
+              'namespace = "com.kothafinder.nepal"'
+          )
+
+          text = text.replace(
+              'applicationId = "com.kothafinder.kothafinder_nepal"',
+              'applicationId = "com.kothafinder.nepal"'
+          )
+
+          path.write_text(text)
+
+          print("Android package configured:")
+          print("com.kothafinder.nepal")
+          PY
 
       # 5. Copy Firebase configuration
       - name: Copy Firebase configuration
         run: |
+          test -f google-services.json
+          mkdir -p build_app/android/app
           cp google-services.json build_app/android/app/google-services.json
 
       # 6. Add Firebase Core
@@ -49,34 +82,37 @@ jobs:
         run: |
           flutter pub add firebase_core
 
-      # 7. Configure Google Services plugin
+      # 7. Configure Google Services
       - name: Configure Google Services
         working-directory: build_app
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
-          path = Path("android/settings.gradle.kts")
-          text = path.read_text()
+          settings = Path("android/settings.gradle")
+          app = Path("android/app/build.gradle")
 
-          if 'com.google.gms.google-services' not in text:
-              text = text.replace(
-                  'plugins {',
-                  'plugins {\n    id("com.google.gms.google-services") version "4.4.2" apply false'
+          settings_text = settings.read_text()
+          app_text = app.read_text()
+
+          if "com.google.gms.google-services" not in settings_text:
+              settings_text = settings_text.replace(
+                  "plugins {",
+                  "plugins {\n    id 'com.google.gms.google-services' version '4.4.2' apply false",
+                  1
               )
 
-          path.write_text(text)
-
-          path = Path("android/app/build.gradle.kts")
-          text = path.read_text()
-
-          if 'com.google.gms.google-services' not in text:
-              text = text.replace(
-                  'plugins {',
-                  'plugins {\n    id("com.google.gms.google-services")'
+          if "com.google.gms.google-services" not in app_text:
+              app_text = app_text.replace(
+                  "plugins {",
+                  "plugins {\n    id 'com.google.gms.google-services'",
+                  1
               )
 
-          path.write_text(text)
+          settings.write_text(settings_text)
+          app.write_text(app_text)
+
+          print("Google Services configured successfully.")
           PY
 
       # 8. Create KothaFinder app
@@ -84,8 +120,8 @@ jobs:
         working-directory: build_app
         run: |
           cat > lib/main.dart <<'EOF'
-          import 'package:flutter/material.dart';
           import 'package:firebase_core/firebase_core.dart';
+          import 'package:flutter/material.dart';
 
           Future<void> main() async {
             WidgetsFlutterBinding.ensureInitialized();
@@ -106,6 +142,121 @@ jobs:
                 theme: ThemeData(
                   colorScheme: ColorScheme.fromSeed(
                     seedColor: Colors.blue,
+                  ),
+                  useMaterial3: true,
+                ),
+                home: const WelcomeScreen(),
+              );
+            }
+          }
+
+          class WelcomeScreen extends StatelessWidget {
+            const WelcomeScreen({super.key});
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                body: SafeArea(
+                  child: Center(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.home_work_rounded,
+                            size: 90,
+                            color: Colors.blue,
+                          ),
+                          const SizedBox(height: 25),
+                          const Text(
+                            'KothaFinder Nepal',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 32,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Find rooms, flats and apartments across Nepal.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 17,
+                              color: Colors.grey,
+                            ),
+                          ),
+                          const SizedBox(height: 50),
+                          const Text(
+                            'How do you want to use KothaFinder?',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 25),
+
+                          SizedBox(
+                            width: double.infinity,
+                            height: 58,
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const CustomerHomeScreen(),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.search),
+                              label: const Text(
+                                'I am a Customer',
+                                style: TextStyle(fontSize: 17),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 15),
+
+                          SizedBox(
+                            width: double.infinity,
+                            height: 58,
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const LandlordDashboard(),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.business),
+                              label: const Text(
+                                'I am a Landlord',
+                                style: TextStyle(fontSize: 17),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }
+          }
+
+          class CustomerHomeScreen extends StatelessWidget {
+            const CustomerHomeScreen({super.key});
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                appBar: AppBar(
+                  title:                    seedColor: Colors.blue,
                   ),
                   useMaterial3: true,
                 ),
