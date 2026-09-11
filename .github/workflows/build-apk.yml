@@ -12,9 +12,11 @@ jobs:
 
     steps:
 
+      # 1. Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 2. Set up Flutter
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -22,6 +24,7 @@ jobs:
           channel: stable
           cache: true
 
+      # 3. Create Flutter Android project
       - name: Create Flutter Android project
         run: |
           flutter create \
@@ -29,13 +32,66 @@ jobs:
             --platforms android \
             build_app
 
+      # 4. Set Android application ID
+      - name: Set Android application ID
+        working-directory: build_app
+        run: |
+          sed -i 's/applicationId "com.example.kothafinder_nepal"/applicationId "com.kothafinder.nepal"/' android/app/build.gradle.kts
+
+      # 5. Copy Firebase configuration
+      - name: Copy Firebase configuration
+        run: |
+          cp google-services.json build_app/android/app/google-services.json
+
+      # 6. Add Firebase Core
+      - name: Add Firebase Core
+        working-directory: build_app
+        run: |
+          flutter pub add firebase_core
+
+      # 7. Configure Google Services plugin
+      - name: Configure Google Services
+        working-directory: build_app
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("android/settings.gradle.kts")
+          text = path.read_text()
+
+          if 'com.google.gms.google-services' not in text:
+              text = text.replace(
+                  'plugins {',
+                  'plugins {\n    id("com.google.gms.google-services") version "4.4.2" apply false'
+              )
+
+          path.write_text(text)
+
+          path = Path("android/app/build.gradle.kts")
+          text = path.read_text()
+
+          if 'com.google.gms.google-services' not in text:
+              text = text.replace(
+                  'plugins {',
+                  'plugins {\n    id("com.google.gms.google-services")'
+              )
+
+          path.write_text(text)
+          PY
+
+      # 8. Create KothaFinder app
       - name: Create KothaFinder app
         working-directory: build_app
         run: |
           cat > lib/main.dart <<'EOF'
           import 'package:flutter/material.dart';
+          import 'package:firebase_core/firebase_core.dart';
 
-          void main() {
+          Future<void> main() async {
+            WidgetsFlutterBinding.ensureInitialized();
+
+            await Firebase.initializeApp();
+
             runApp(const KothaFinderApp());
           }
 
@@ -209,7 +265,6 @@ jobs:
                     const SizedBox(height: 20),
 
                     _propertyCard(
-                      context,
                       'Room in Kathmandu',
                       'Rs. 10,000/month',
                       'Available now',
@@ -217,7 +272,6 @@ jobs:
                     ),
 
                     _propertyCard(
-                      context,
                       '1BHK Apartment',
                       'Rs. 18,000/month',
                       'Kathmandu',
@@ -225,7 +279,6 @@ jobs:
                     ),
 
                     _propertyCard(
-                      context,
                       'Room in Lalitpur',
                       'Rs. 8,000/month',
                       'Available now',
@@ -237,7 +290,6 @@ jobs:
             }
 
             Widget _propertyCard(
-              BuildContext context,
               String title,
               String price,
               String location,
@@ -309,9 +361,7 @@ jobs:
                     SizedBox(
                       height: 58,
                       child: ElevatedButton.icon(
-                        onPressed: () {
-                          _showComingSoon(context);
-                        },
+                        onPressed: () {},
                         icon: const Icon(Icons.add_home),
                         label: const Text(
                           'Add New Property',
@@ -347,68 +397,41 @@ jobs:
                           'Rs. 25,000/month • Available',
                         ),
                         trailing: const Icon(Icons.edit),
-                        onTap: () {
-                          _showComingSoon(context);
-                        },
-                      ),
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    Card(
-                      child: ListTile(
-                        leading: const CircleAvatar(
-                          child: Icon(Icons.home),
-                        ),
-                        title: const Text(
-                          'My Room',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        subtitle: const Text(
-                          'Rs. 10,000/month • Available',
-                        ),
-                        trailing: const Icon(Icons.edit),
-                        onTap: () {
-                          _showComingSoon(context);
-                        },
+                        onTap: () {},
                       ),
                     ),
                   ],
                 ),
               );
             }
-
-            void _showComingSoon(BuildContext context) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'This feature will be connected in the next step.',
-                  ),
-                ),
-              );
-            }
           }
           EOF
 
+      # 9. Remove default Flutter test
       - name: Remove default test
         working-directory: build_app
         run: |
           rm -rf test
 
+      # 10. Get dependencies
       - name: Get dependencies
         working-directory: build_app
-        run: flutter pub get
+        run: |
+          flutter pub get
 
+      # 11. Analyze project
       - name: Analyze Flutter project
         working-directory: build_app
-        run: flutter analyze
+        run: |
+          flutter analyze
 
+      # 12. Build APK
       - name: Build release APK
         working-directory: build_app
-        run: flutter build apk --release
+        run: |
+          flutter build apk --release
 
+      # 13. Upload APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
