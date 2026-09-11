@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "298020133627",
+    "project_id": "kothafinder-nepal",
+    "storage_bucket": "kothafinder-nepal.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:298020133627:android:601306bc4fc4490090ae5e",
+        "android_client_info": {
+          "package_name": "com.kothafinder.nepal"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDl8RcoMuhiiwVHoWZ0As4likli4fED2zE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
