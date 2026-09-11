@@ -28,32 +28,66 @@ jobs:
             --platforms android \
             build_app
 
-      - name: Configure Android application ID
+      - name: Configure Android package
         working-directory: build_app
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
           path = Path("android/app/build.gradle")
-
           text = path.read_text()
 
-          text = text.replace(
-              'applicationId "com.example.kothafinder_nepal"',
-              'applicationId "com.kothafinder.nepal"'
-          )
+          old_id = "com.example.kothafinder_nepal"
+          new_id = "com.kothafinder.nepal"
+
+          if old_id not in text:
+              print("Could not find the default Flutter application ID.")
+              print("Current build.gradle:")
+              print(text)
+              raise SystemExit(1)
+
+          text = text.replace(old_id, new_id)
 
           path.write_text(text)
+
+          print("Android application ID changed successfully.")
+          print("Application ID:", new_id)
           PY
+
+      - name: Verify Android package
+        working-directory: build_app
+        run: |
+          echo "Checking Android application ID..."
+          grep -n "applicationId" android/app/build.gradle
+
+          if ! grep -q 'applicationId "com.kothafinder.nepal"' android/app/build.gradle; then
+            echo "ERROR: Android application ID is incorrect."
+            exit 1
+          fi
+
+          echo "Android application ID is correct."
 
       - name: Copy Firebase configuration
         run: |
           if [ ! -f google-services.json ]; then
-            echo "ERROR: google-services.json was not found in the repository root."
+            echo "ERROR: google-services.json was not found in repository root."
             exit 1
           fi
 
           cp google-services.json build_app/android/app/google-services.json
+
+      - name: Verify Firebase package
+        run: |
+          echo "Checking Firebase configuration..."
+
+          grep -q '"package_name": "com.kothafinder.nepal"' google-services.json
+
+          if [ $? -ne 0 ]; then
+            echo "ERROR: Firebase configuration does not contain com.kothafinder.nepal"
+            exit 1
+          fi
+
+          echo "Firebase package matches com.kothafinder.nepal."
 
       - name: Add Firebase Core
         working-directory: build_app
@@ -72,7 +106,9 @@ jobs:
           settings_text = settings.read_text()
           app_text = app.read_text()
 
-          if "com.google.gms.google-services" not in settings_text:
+          google_plugin = "com.google.gms.google-services"
+
+          if google_plugin not in settings_text:
               settings_text = settings_text.replace(
                   "plugins {",
                   """plugins {
@@ -80,7 +116,7 @@ jobs:
                   1
               )
 
-          if "com.google.gms.google-services" not in app_text:
+          if google_plugin not in app_text:
               app_text = app_text.replace(
                   "plugins {",
                   """plugins {
@@ -90,6 +126,8 @@ jobs:
 
           settings.write_text(settings_text)
           app.write_text(app_text)
+
+          print("Google Services configured.")
           PY
 
       - name: Create KothaFinder app
