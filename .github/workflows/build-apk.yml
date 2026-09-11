@@ -11,12 +11,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
-      # 1. Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Set up Flutter
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -24,65 +21,45 @@ jobs:
           channel: stable
           cache: true
 
-      # 3. Create Flutter project
       - name: Create Flutter project
         run: |
           flutter create \
             --project-name kothafinder_nepal \
-            --org com.kothafinder \
             --platforms android \
             build_app
 
-      # 4. Set the exact Android package ID required by Firebase
-      - name: Configure Android package
+      - name: Configure Android application ID
         working-directory: build_app
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
           path = Path("android/app/build.gradle")
+
           text = path.read_text()
 
           text = text.replace(
-              'namespace "com.kothafinder.kothafinder_nepal"',
-              'namespace "com.kothafinder.nepal"'
-          )
-
-          text = text.replace(
-              'applicationId "com.kothafinder.kothafinder_nepal"',
+              'applicationId "com.example.kothafinder_nepal"',
               'applicationId "com.kothafinder.nepal"'
           )
 
-          text = text.replace(
-              'namespace = "com.kothafinder.kothafinder_nepal"',
-              'namespace = "com.kothafinder.nepal"'
-          )
-
-          text = text.replace(
-              'applicationId = "com.kothafinder.kothafinder_nepal"',
-              'applicationId = "com.kothafinder.nepal"'
-          )
-
           path.write_text(text)
-
-          print("Android package configured:")
-          print("com.kothafinder.nepal")
           PY
 
-      # 5. Copy Firebase configuration
       - name: Copy Firebase configuration
         run: |
-          test -f google-services.json
-          mkdir -p build_app/android/app
+          if [ ! -f google-services.json ]; then
+            echo "ERROR: google-services.json was not found in the repository root."
+            exit 1
+          fi
+
           cp google-services.json build_app/android/app/google-services.json
 
-      # 6. Add Firebase Core
       - name: Add Firebase Core
         working-directory: build_app
         run: |
           flutter pub add firebase_core
 
-      # 7. Configure Google Services
       - name: Configure Google Services
         working-directory: build_app
         run: |
@@ -98,24 +75,23 @@ jobs:
           if "com.google.gms.google-services" not in settings_text:
               settings_text = settings_text.replace(
                   "plugins {",
-                  "plugins {\n    id 'com.google.gms.google-services' version '4.4.2' apply false",
+                  """plugins {
+              id 'com.google.gms.google-services' version '4.4.2' apply false""",
                   1
               )
 
           if "com.google.gms.google-services" not in app_text:
               app_text = app_text.replace(
                   "plugins {",
-                  "plugins {\n    id 'com.google.gms.google-services'",
+                  """plugins {
+              id 'com.google.gms.google-services'""",
                   1
               )
 
           settings.write_text(settings_text)
           app.write_text(app_text)
-
-          print("Google Services configured successfully.")
           PY
 
-      # 8. Create KothaFinder app
       - name: Create KothaFinder app
         working-directory: build_app
         run: |
@@ -156,214 +132,69 @@ jobs:
             @override
             Widget build(BuildContext context) {
               return Scaffold(
-                body: SafeArea(
-                  child: Center(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.home_work_rounded,
-                            size: 90,
-                            color: Colors.blue,
-                          ),
-                          const SizedBox(height: 25),
-                          const Text(
-                            'KothaFinder Nepal',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'Find rooms, flats and apartments across Nepal.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 17,
-                              color: Colors.grey,
-                            ),
-                          ),
-                          const SizedBox(height: 50),
-                          const Text(
-                            'How do you want to use KothaFinder?',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 25),
-
-                          SizedBox(
-                            width: double.infinity,
-                            height: 58,
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        const CustomerHomeScreen(),
-                                  ),
-                                );
-                              },
-                              icon: const Icon(Icons.search),
-                              label: const Text(
-                                'I am a Customer',
-                                style: TextStyle(fontSize: 17),
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 15),
-
-                          SizedBox(
-                            width: double.infinity,
-                            height: 58,
-                            child: OutlinedButton.icon(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        const LandlordDashboard(),
-                                  ),
-                                );
-                              },
-                              icon: const Icon(Icons.business),
-                              label: const Text(
-                                'I am a Landlord',
-                                style: TextStyle(fontSize: 17),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }
-          }
-
-          class CustomerHomeScreen extends StatelessWidget {
-            const CustomerHomeScreen({super.key});
-
-            @override
-            Widget build(BuildContext context) {
-              return Scaffold(
                 appBar: AppBar(
-                  title:                    seedColor: Colors.blue,
-                  ),
-                  useMaterial3: true,
+                  title: const Text('KothaFinder Nepal'),
+                  centerTitle: true,
                 ),
-                home: const WelcomeScreen(),
-              );
-            }
-          }
-
-          class WelcomeScreen extends StatelessWidget {
-            const WelcomeScreen({super.key});
-
-            @override
-            Widget build(BuildContext context) {
-              return Scaffold(
-                body: SafeArea(
-                  child: Center(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.home_work_rounded,
-                            size: 90,
-                            color: Colors.blue,
+                body: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.home_work,
+                          size: 90,
+                        ),
+                        const SizedBox(height: 24),
+                        const Text(
+                          'KothaFinder Nepal',
+                          style: TextStyle(
+                            fontSize: 30,
+                            fontWeight: FontWeight.bold,
                           ),
-
-                          const SizedBox(height: 25),
-
-                          const Text(
-                            'KothaFinder Nepal',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.bold,
-                            ),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Find rooms, flats and apartments in Nepal.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 16),
+                        ),
+                        const SizedBox(height: 40),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      const CustomerHomeScreen(),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.search),
+                            label: const Text('I am a Customer'),
                           ),
-
-                          const SizedBox(height: 12),
-
-                          const Text(
-                            'Find rooms, flats and apartments across Nepal.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 17,
-                              color: Colors.grey,
-                            ),
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      const LandlordDashboard(),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.business),
+                            label: const Text('I am a Landlord'),
                           ),
-
-                          const SizedBox(height: 50),
-
-                          const Text(
-                            'How do you want to use KothaFinder?',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-
-                          const SizedBox(height: 25),
-
-                          SizedBox(
-                            width: double.infinity,
-                            height: 58,
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        const CustomerHomeScreen(),
-                                  ),
-                                );
-                              },
-                              icon: const Icon(Icons.search),
-                              label: const Text(
-                                'I am a Customer',
-                                style: TextStyle(fontSize: 17),
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 15),
-
-                          SizedBox(
-                            width: double.infinity,
-                            height: 58,
-                            child: OutlinedButton.icon(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        const LandlordDashboard(),
-                                  ),
-                                );
-                              },
-                              icon: const Icon(Icons.business),
-                              label: const Text(
-                                'I am a Landlord',
-                                style: TextStyle(fontSize: 17),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -390,19 +221,11 @@ jobs:
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-
-                    const SizedBox(height: 8),
-
+                    const SizedBox(height: 10),
                     const Text(
                       'Search rooms, flats and apartments in Nepal.',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey,
-                      ),
                     ),
-
-                    const SizedBox(height: 25),
-
+                    const SizedBox(height: 24),
                     TextField(
                       decoration: InputDecoration(
                         hintText: 'Search location...',
@@ -412,61 +235,55 @@ jobs:
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 20),
-
-                    _propertyCard(
-                      'Room in Kathmandu',
-                      'Rs. 10,000/month',
-                      'Available now',
-                      Icons.home,
+                    const PropertyCard(
+                      title: 'Room in Kathmandu',
+                      price: 'Rs. 10,000/month',
+                      location: 'Kathmandu',
                     ),
-
-                    _propertyCard(
-                      '1BHK Apartment',
-                      'Rs. 18,000/month',
-                      'Kathmandu',
-                      Icons.apartment,
+                    const PropertyCard(
+                      title: '1BHK Apartment',
+                      price: 'Rs. 18,000/month',
+                      location: 'Kathmandu',
                     ),
-
-                    _propertyCard(
-                      'Room in Lalitpur',
-                      'Rs. 8,000/month',
-                      'Available now',
-                      Icons.house,
+                    const PropertyCard(
+                      title: 'Room in Lalitpur',
+                      price: 'Rs. 8,000/month',
+                      location: 'Lalitpur',
                     ),
                   ],
                 ),
               );
             }
+          }
 
-            Widget _propertyCard(
-              String title,
-              String price,
-              String location,
-              IconData icon,
-            ) {
+          class PropertyCard extends StatelessWidget {
+            final String title;
+            final String price;
+            final String location;
+
+            const PropertyCard({
+              super.key,
+              required this.title,
+              required this.price,
+              required this.location,
+            });
+
+            @override
+            Widget build(BuildContext context) {
               return Card(
-                margin: const EdgeInsets.only(bottom: 15),
+                margin: const EdgeInsets.only(bottom: 16),
                 child: ListTile(
-                  contentPadding: const EdgeInsets.all(12),
-                  leading: CircleAvatar(
-                    radius: 28,
-                    child: Icon(icon),
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.home),
                   ),
                   title: Text(
                     title,
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: 17,
                     ),
                   ),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      '$price • $location',
-                    ),
-                  ),
+                  subtitle: Text('$price • $location'),
                   trailing: const Icon(
                     Icons.arrow_forward_ios,
                     size: 18,
@@ -486,103 +303,82 @@ jobs:
                 appBar: AppBar(
                   title: const Text('Landlord Dashboard'),
                 ),
-                body: ListView(
+                body: Padding(
                   padding: const EdgeInsets.all(20),
-                  children: [
-                    const Text(
-                      'Welcome, Landlord',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    const Text(
-                      'Manage your properties from here.',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey,
-                      ),
-                    ),
-
-                    const SizedBox(height: 30),
-
-                    SizedBox(
-                      height: 58,
-                      child: ElevatedButton.icon(
-                        onPressed: () {},
-                        icon: const Icon(Icons.add_home),
-                        label: const Text(
-                          'Add New Property',
-                          style: TextStyle(fontSize: 17),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Landlord Dashboard',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ),
-
-                    const SizedBox(height: 25),
-
-                    const Text(
-                      'My Properties',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Manage your properties.',
+                        style: TextStyle(fontSize: 16),
                       ),
-                    ),
-
-                    const SizedBox(height: 15),
-
-                    Card(
-                      child: ListTile(
-                        leading: const CircleAvatar(
-                          child: Icon(Icons.apartment),
+                      const SizedBox(height: 30),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 55,
+                        child: ElevatedButton.icon(
+                          onPressed: () {},
+                          icon: const Icon(Icons.add_home),
+                          label: const Text('Add New Property'),
                         ),
-                        title: const Text(
-                          'My 2BHK Apartment',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
+                      ),
+                      const SizedBox(height: 25),
+                      const Text(
+                        'My Properties',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 15),
+                      const Card(
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            child: Icon(Icons.apartment),
                           ),
+                          title: Text('My 2BHK Apartment'),
+                          subtitle: Text(
+                            'Rs. 25,000/month • Available',
+                          ),
+                          trailing: Icon(Icons.edit),
                         ),
-                        subtitle: const Text(
-                          'Rs. 25,000/month • Available',
-                        ),
-                        trailing: const Icon(Icons.edit),
-                        onTap: () {},
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               );
             }
           }
           EOF
 
-      # 9. Remove default Flutter test
-      - name: Remove default test
+      - name: Remove default tests
         working-directory: build_app
         run: |
           rm -rf test
 
-      # 10. Get dependencies
       - name: Get dependencies
         working-directory: build_app
         run: |
           flutter pub get
 
-      # 11. Analyze project
       - name: Analyze Flutter project
         working-directory: build_app
         run: |
           flutter analyze
 
-      # 12. Build APK
       - name: Build release APK
         working-directory: build_app
         run: |
           flutter build apk --release
 
-      # 13. Upload APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
