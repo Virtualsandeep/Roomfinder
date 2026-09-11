@@ -21,186 +21,157 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Create Flutter project
+      - name: Create Flutter Android project
         run: |
-          flutter create --project-name kothafinder_nepal --platforms=android build_app
+          flutter create \
+            --project-name kothafinder_nepal \
+            --platforms=android \
+            build_app
 
-      - name: Copy Flutter files
+      - name: Create KothaFinder app
+        working-directory: build_app
         run: |
-          cp pubspec.yaml build_app/pubspec.yaml
+          cat > lib/main.dart <<'EOF'
+import 'package:flutter/material.dart';
 
-          mkdir -p build_app/lib
+void main() {
+  runApp(const KothaFinderApp());
+}
 
-          if [ -f firebase_options.dart ]; then
-            cp firebase_options.dart build_app/lib/firebase_options.dart
-          fi
+class KothaFinderApp extends StatelessWidget {
+  const KothaFinderApp({super.key});
 
-          if [ -f main.dart ]; then
-            cp main.dart build_app/lib/main.dart
-          else
-            cat > build_app/lib/main.dart <<'EOF'
-            import 'package:flutter/material.dart';
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'KothaFinder Nepal',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blue,
+        ),
+        useMaterial3: true,
+      ),
+      home: const HomeScreen(),
+    );
+  }
+}
 
-            void main() {
-              runApp(const KothaFinderApp());
-            }
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
 
-            class KothaFinderApp extends StatelessWidget {
-              const KothaFinderApp({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('KothaFinder Nepal'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          const SizedBox(height: 20),
 
-              @override
-              Widget build(BuildContext context) {
-                return MaterialApp(
-                  debugShowCheckedModeBanner: false,
-                  title: 'KothaFinder Nepal',
-                  theme: ThemeData(
-                    colorScheme: ColorScheme.fromSeed(
-                      seedColor: Colors.blue,
-                    ),
-                    useMaterial3: true,
-                  ),
-                  home: const HomeScreen(),
-                );
-              }
-            }
+          const Text(
+            'KothaFinder Nepal',
+            style: TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
 
-            class HomeScreen extends StatelessWidget {
-              const HomeScreen({super.key});
+          const SizedBox(height: 8),
 
-              @override
-              Widget build(BuildContext context) {
-                return Scaffold(
-                  appBar: AppBar(
-                    title: const Text('KothaFinder Nepal'),
-                  ),
-                  body: ListView(
-                    padding: const EdgeInsets.all(20),
-                    children: [
-                      const Text(
-                        'Find your room in Nepal',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
+          const Text(
+            'Find rooms and connect with landlords.',
+            style: TextStyle(
+              fontSize: 16,
+            ),
+          ),
 
-                      Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.search),
-                          title: const Text('Find a Room'),
-                          subtitle: const Text(
-                            'Search rooms by location and rent',
-                          ),
-                          onTap: () {},
-                        ),
-                      ),
+          const SizedBox(height: 30),
 
-                      Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.home_work),
-                          title: const Text('I am a Landlord'),
-                          subtitle: const Text(
-                            'Post your room for customers',
-                          ),
-                          onTap: () {},
-                        ),
-                      ),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.search),
+              title: const Text('Find a Room'),
+              subtitle: const Text(
+                'Search rooms by location and rent',
+              ),
+              trailing: const Icon(Icons.arrow_forward_ios),
+              onTap: () {},
+            ),
+          ),
 
-                      Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.map),
-                          title: const Text('Map Search'),
-                          subtitle: const Text(
-                            'Find rooms near you',
-                          ),
-                          onTap: () {},
-                        ),
-                      ),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.home_work),
+              title: const Text('I am a Landlord'),
+              subtitle: const Text(
+                'Post your room for customers',
+              ),
+              trailing: const Icon(Icons.arrow_forward_ios),
+              onTap: () {},
+            ),
+          ),
 
-                      Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.favorite),
-                          title: const Text('Saved Rooms'),
-                          subtitle: const Text(
-                            'View your favourite listings',
-                          ),
-                          onTap: () {},
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }
-            }
-            EOF
-          fi
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.map),
+              title: const Text('Map Search'),
+              subtitle: const Text(
+                'Find rooms near you',
+              ),
+              trailing: const Icon(Icons.arrow_forward_ios),
+              onTap: () {},
+            ),
+          ),
 
-      - name: Get packages
-        working-directory: build_app
-        run: flutter pub get
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.favorite),
+              title: const Text('Saved Rooms'),
+              subtitle: const Text(
+                'View your favourite rooms',
+              ),
+              trailing: const Icon(Icons.arrow_forward_ios),
+              onTap: () {},
+            ),
+          ),
 
-      - name: Build release APK
-        working-directory: build_app
-        run: flutter build apk --release
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.chat),
+              title: const Text('Messages'),
+              subtitle: const Text(
+                'Chat with landlords',
+              ),
+              trailing: const Icon(Icons.arrow_forward_ios),
+              onTap: () {},
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+EOF
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: KothaFinder-APK
-          path: build_app/build/app/outputs/flutter-apk/app-release.apk                      ),
-
-                      Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.map),
-                          title: const Text('Map Search'),
-                          subtitle: const Text(
-                            'Find rooms near you',
-                          ),
-                          onTap: () {},
-                        ),
-                      ),
-
-                      Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.favorite),
-                          title: const Text('Saved Rooms'),
-                          subtitle: const Text(
-                            'View your favourite listings',
-                          ),
-                          onTap: () {},
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }
-            }
-            EOF
-          fi
-
-      - name: Force compileSdk/targetSdk to 35
+      - name: Set Android SDK versions
         working-directory: build_app
         run: |
           GRADLE_FILE="android/app/build.gradle.kts"
-          if [ ! -f "$GRADLE_FILE" ]; then
-            GRADLE_FILE="android/app/build.gradle"
+
+          if [ -f "$GRADLE_FILE" ]; then
+            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/' "$GRADLE_FILE"
+            sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 35/' "$GRADLE_FILE"
           fi
 
-          echo "Patching $GRADLE_FILE"
+          if [ -f "android/app/build.gradle" ]; then
+            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 35/' android/app/build.gradle
+            sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 35/' android/app/build.gradle
+          fi
 
-          # Kotlin DSL style
-          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/' "$GRADLE_FILE" || true
-          sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 35/' "$GRADLE_FILE" || true
-
-          # Groovy DSL style
-          sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 35/' "$GRADLE_FILE" || true
-          sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 35/' "$GRADLE_FILE" || true
-
-          echo "----- Resulting android {} block -----"
-          grep -A 15 "^android" "$GRADLE_FILE" || cat "$GRADLE_FILE"
-
-      - name: Get packages
+      - name: Get Flutter packages
         working-directory: build_app
         run: flutter pub get
 
