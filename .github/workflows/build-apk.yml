@@ -39,102 +39,108 @@ jobs:
             cp main.dart build_app/lib/main.dart
           else
             cat > build_app/lib/main.dart <<'EOF'
-import 'package:flutter/material.dart';
+            import 'package:flutter/material.dart';
 
-void main() {
-  runApp(const KothaFinderApp());
-}
+            void main() {
+              runApp(const KothaFinderApp());
+            }
 
-class KothaFinderApp extends StatelessWidget {
-  const KothaFinderApp({super.key});
+            class KothaFinderApp extends StatelessWidget {
+              const KothaFinderApp({super.key});
 
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'KothaFinder Nepal',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
-      home: const HomeScreen(),
-    );
-  }
-}
+              @override
+              Widget build(BuildContext context) {
+                return MaterialApp(
+                  debugShowCheckedModeBanner: false,
+                  title: 'KothaFinder Nepal',
+                  theme: ThemeData(
+                    colorScheme: ColorScheme.fromSeed(
+                      seedColor: Colors.blue,
+                    ),
+                    useMaterial3: true,
+                  ),
+                  home: const HomeScreen(),
+                );
+              }
+            }
 
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+            class HomeScreen extends StatelessWidget {
+              const HomeScreen({super.key});
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('KothaFinder Nepal'),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          const Text(
-            'Find your room in Nepal',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 20),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.search),
-              title: const Text('Find a Room'),
-              subtitle: const Text(
-                'Search rooms by location and rent',
-              ),
-              onTap: () {},
-            ),
-          ),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.home_work),
-              title: const Text('I am a Landlord'),
-              subtitle: const Text(
-                'Post your room for customers',
-              ),
-              onTap: () {},
-            ),
-          ),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.map),
-              title: const Text('Map Search'),
-              subtitle: const Text(
-                'Find rooms near you',
-              ),
-              onTap: () {},
-            ),
-          ),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.favorite),
-              title: const Text('Saved Rooms'),
-              subtitle: const Text(
-                'View your favourite listings',
-              ),
-              onTap: () {},
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-EOF
+              @override
+              Widget build(BuildContext context) {
+                return Scaffold(
+                  appBar: AppBar(
+                    title: const Text('KothaFinder Nepal'),
+                  ),
+                  body: ListView(
+                    padding: const EdgeInsets.all(20),
+                    children: [
+                      const Text(
+                        'Find your room in Nepal',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.search),
+                          title: const Text('Find a Room'),
+                          subtitle: const Text(
+                            'Search rooms by location and rent',
+                          ),
+                          onTap: () {},
+                        ),
+                      ),
+
+                      Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.home_work),
+                          title: const Text('I am a Landlord'),
+                          subtitle: const Text(
+                            'Post your room for customers',
+                          ),
+                          onTap: () {},
+                        ),
+                      ),
+
+                      Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.map),
+                          title: const Text('Map Search'),
+                          subtitle: const Text(
+                            'Find rooms near you',
+                          ),
+                          onTap: () {},
+                        ),
+                      ),
+
+                      Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.favorite),
+                          title: const Text('Saved Rooms'),
+                          subtitle: const Text(
+                            'View your favourite listings',
+                          ),
+                          onTap: () {},
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+            }
+            EOF
           fi
 
       - name: Get packages
         working-directory: build_app
         run: flutter pub get
 
-      - name: Build APK
+      - name: Build release APK
         working-directory: build_app
         run: flutter build apk --release
 
