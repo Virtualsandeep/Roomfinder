@@ -36,7 +36,7 @@ jobs:
       - name: Set Android application ID
         working-directory: build_app
         run: |
-         sed -i 's/applicationId "com.example.kothafinder_nepal"/applicationId "com.kothafinder.nepal"/' android/app/build.gradle
+          sed -i 's/applicationId "com.example.kothafinder_nepal"/applicationId "com.kothafinder.nepal"/' android/app/build.gradle.kts
 
       # 5. Copy Firebase configuration
       - name: Copy Firebase configuration
