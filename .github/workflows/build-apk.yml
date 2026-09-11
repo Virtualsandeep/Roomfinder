@@ -12,11 +12,9 @@ jobs:
 
     steps:
 
-      # 1. Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Set up Flutter
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -24,7 +22,6 @@ jobs:
           channel: stable
           cache: true
 
-      # 3. Create Flutter Android project
       - name: Create Flutter Android project
         run: |
           flutter create \
@@ -32,7 +29,6 @@ jobs:
             --platforms android \
             build_app
 
-      # 4. Create KothaFinder app
       - name: Create KothaFinder app
         working-directory: build_app
         run: |
@@ -57,20 +53,125 @@ jobs:
                   ),
                   useMaterial3: true,
                 ),
-                home: const HomeScreen(),
+                home: const WelcomeScreen(),
               );
             }
           }
 
-          class HomeScreen extends StatelessWidget {
-            const HomeScreen({super.key});
+          class WelcomeScreen extends StatelessWidget {
+            const WelcomeScreen({super.key});
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                body: SafeArea(
+                  child: Center(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.home_work_rounded,
+                            size: 90,
+                            color: Colors.blue,
+                          ),
+
+                          const SizedBox(height: 25),
+
+                          const Text(
+                            'KothaFinder Nepal',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 32,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          const Text(
+                            'Find rooms, flats and apartments across Nepal.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 17,
+                              color: Colors.grey,
+                            ),
+                          ),
+
+                          const SizedBox(height: 50),
+
+                          const Text(
+                            'How do you want to use KothaFinder?',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+
+                          const SizedBox(height: 25),
+
+                          SizedBox(
+                            width: double.infinity,
+                            height: 58,
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const CustomerHomeScreen(),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.search),
+                              label: const Text(
+                                'I am a Customer',
+                                style: TextStyle(fontSize: 17),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 15),
+
+                          SizedBox(
+                            width: double.infinity,
+                            height: 58,
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const LandlordDashboard(),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.business),
+                              label: const Text(
+                                'I am a Landlord',
+                                style: TextStyle(fontSize: 17),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }
+          }
+
+          class CustomerHomeScreen extends StatelessWidget {
+            const CustomerHomeScreen({super.key});
 
             @override
             Widget build(BuildContext context) {
               return Scaffold(
                 appBar: AppBar(
-                  title: const Text('KothaFinder Nepal'),
-                  centerTitle: true,
+                  title: const Text('Find a Property'),
                 ),
                 body: ListView(
                   padding: const EdgeInsets.all(20),
@@ -86,7 +187,7 @@ jobs:
                     const SizedBox(height: 8),
 
                     const Text(
-                      'Find rooms, flats and apartments in Nepal.',
+                      'Search rooms, flats and apartments in Nepal.',
                       style: TextStyle(
                         fontSize: 16,
                         color: Colors.grey,
@@ -107,27 +208,129 @@ jobs:
 
                     const SizedBox(height: 20),
 
-                    Card(
-                      child: ListTile(
-                        leading: const CircleAvatar(
-                          child: Icon(Icons.home),
-                        ),
-                        title: const Text(
-                          'Room in Kathmandu',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        subtitle: const Text(
-                          'Rs. 10,000/month • Available now',
-                        ),
-                        trailing: const Icon(
-                          Icons.arrow_forward_ios,
-                          size: 18,
-                        ),
-                        onTap: () {},
+                    _propertyCard(
+                      context,
+                      'Room in Kathmandu',
+                      'Rs. 10,000/month',
+                      'Available now',
+                      Icons.home,
+                    ),
+
+                    _propertyCard(
+                      context,
+                      '1BHK Apartment',
+                      'Rs. 18,000/month',
+                      'Kathmandu',
+                      Icons.apartment,
+                    ),
+
+                    _propertyCard(
+                      context,
+                      'Room in Lalitpur',
+                      'Rs. 8,000/month',
+                      'Available now',
+                      Icons.house,
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            Widget _propertyCard(
+              BuildContext context,
+              String title,
+              String price,
+              String location,
+              IconData icon,
+            ) {
+              return Card(
+                margin: const EdgeInsets.only(bottom: 15),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.all(12),
+                  leading: CircleAvatar(
+                    radius: 28,
+                    child: Icon(icon),
+                  ),
+                  title: Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 17,
+                    ),
+                  ),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      '$price • $location',
+                    ),
+                  ),
+                  trailing: const Icon(
+                    Icons.arrow_forward_ios,
+                    size: 18,
+                  ),
+                  onTap: () {},
+                ),
+              );
+            }
+          }
+
+          class LandlordDashboard extends StatelessWidget {
+            const LandlordDashboard({super.key});
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                appBar: AppBar(
+                  title: const Text('Landlord Dashboard'),
+                ),
+                body: ListView(
+                  padding: const EdgeInsets.all(20),
+                  children: [
+                    const Text(
+                      'Welcome, Landlord',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
+
+                    const SizedBox(height: 10),
+
+                    const Text(
+                      'Manage your properties from here.',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.grey,
+                      ),
+                    ),
+
+                    const SizedBox(height: 30),
+
+                    SizedBox(
+                      height: 58,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          _showComingSoon(context);
+                        },
+                        icon: const Icon(Icons.add_home),
+                        label: const Text(
+                          'Add New Property',
+                          style: TextStyle(fontSize: 17),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 25),
+
+                    const Text(
+                      'My Properties',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+
+                    const SizedBox(height: 15),
 
                     Card(
                       child: ListTile(
@@ -135,72 +338,77 @@ jobs:
                           child: Icon(Icons.apartment),
                         ),
                         title: const Text(
-                          '1BHK Apartment',
+                          'My 2BHK Apartment',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         subtitle: const Text(
-                          'Rs. 18,000/month • Kathmandu',
+                          'Rs. 25,000/month • Available',
                         ),
-                        trailing: const Icon(
-                          Icons.arrow_forward_ios,
-                          size: 18,
-                        ),
-                        onTap: () {},
+                        trailing: const Icon(Icons.edit),
+                        onTap: () {
+                          _showComingSoon(context);
+                        },
                       ),
                     ),
+
+                    const SizedBox(height: 10),
 
                     Card(
                       child: ListTile(
                         leading: const CircleAvatar(
-                          child: Icon(Icons.house),
+                          child: Icon(Icons.home),
                         ),
                         title: const Text(
-                          'Room in Lalitpur',
+                          'My Room',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         subtitle: const Text(
-                          'Rs. 8,000/month • Available now',
+                          'Rs. 10,000/month • Available',
                         ),
-                        trailing: const Icon(
-                          Icons.arrow_forward_ios,
-                          size: 18,
-                        ),
-                        onTap: () {},
+                        trailing: const Icon(Icons.edit),
+                        onTap: () {
+                          _showComingSoon(context);
+                        },
                       ),
                     ),
                   ],
                 ),
               );
             }
+
+            void _showComingSoon(BuildContext context) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'This feature will be connected in the next step.',
+                  ),
+                ),
+              );
+            }
           }
           EOF
 
-      # 5. Remove default Flutter test
       - name: Remove default test
         working-directory: build_app
         run: |
           rm -rf test
 
-      # 6. Get dependencies
       - name: Get dependencies
         working-directory: build_app
         run: flutter pub get
 
-      # 7. Analyze Flutter project
       - name: Analyze Flutter project
         working-directory: build_app
         run: flutter analyze
 
-      # 8. Build release APK
       - name: Build release APK
         working-directory: build_app
         run: flutter build apk --release
 
-      # 9. Upload APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
