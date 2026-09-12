@@ -208,29 +208,29 @@ jobs:
           class DefaultFirebaseOptions {{
           static FirebaseOptions get currentPlatform {{
           if (kIsWeb) {{
-          throw UnsupportedError(
-          'KothaFinder does not support Firebase Web in this build.',
-           );
-          }}
+      throw UnsupportedError(
+        'KothaFinder does not support Firebase Web in this build.',
+      );
+    }}
 
-          if (defaultTargetPlatform == TargetPlatform.android) {{
-          return android;
-          }}
+    if (defaultTargetPlatform == TargetPlatform.android) {{
+      return android;
+    }}
 
-          throw UnsupportedError(
-          'DefaultFirebaseOptions are not supported for this platform.',
-          );
-          }}
+    throw UnsupportedError(
+      'DefaultFirebaseOptions are not supported for this platform.',
+    );
+  }}
 
-          static const FirebaseOptions android = FirebaseOptions(
-          apiKey: {api_key!r},
-          appId: {app_id!r},
-          messagingSenderId: {project_number!r},
-          projectId: {project_id!r},
-          storageBucket: {storage_bucket!r},
-          );
-          }}
-          '''
+  static const FirebaseOptions android = FirebaseOptions(
+    apiKey: {api_key!r},
+    appId: {app_id!r},
+    messagingSenderId: {project_number!r},
+    projectId: {project_id!r},
+    storageBucket: {storage_bucket!r},
+  );
+}}
+'''
 
           dart = dart.replace("'", "'")
 
