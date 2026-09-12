@@ -50,13 +50,13 @@ jobs:
           text = path.read_text()
 
           text = text.replace(
-              "namespace = \"com.example.kothafinder_nepal\"",
-              "namespace = \"com.kothafinder.nepal\""
+              'namespace = "com.example.kothafinder_nepal"',
+              'namespace = "com.kothafinder.nepal"'
           )
 
           text = text.replace(
-              "applicationId = \"com.example.kothafinder_nepal\"",
-              "applicationId = \"com.kothafinder.nepal\""
+              'applicationId = "com.example.kothafinder_nepal"',
+              'applicationId = "com.kothafinder.nepal"'
           )
 
           path.write_text(text)
@@ -105,11 +105,13 @@ jobs:
         run: |
           test -f build_app/android/app/google-services.json
           grep -q "com.kothafinder.nepal" build_app/android/app/google-services.json
+          echo "Firebase configuration found."
+          echo "Correct Android package name found."
 
       # ============================================================
-      # 9. ADD PACKAGES
+      # 9. ADD FIREBASE AND URL LAUNCHER PACKAGES
       # ============================================================
-      - name: Add Firebase and Maps packages
+      - name: Add Firebase packages
         working-directory: build_app
         run: |
           flutter pub add firebase_core
@@ -125,40 +127,37 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          path = Path("build_app/android/settings.gradle")
-          text = path.read_text()
+          settings_path = Path(
+              "build_app/android/settings.gradle"
+          )
+
+          text = settings_path.read_text()
 
           old = 'id "dev.flutter.flutter-plugin-loader" version "1.0.0"'
 
           new = '''id "dev.flutter.flutter-plugin-loader" version "1.0.0"
           id "com.google.gms.google-services" version "4.4.2" apply false'''
 
-          if "com.google.gms.google-services" not in text:
+          if 'id "com.google.gms.google-services" version "4.4.2"' not in text:
               text = text.replace(old, new)
 
-          path.write_text(text)
+          settings_path.write_text(text)
 
-          path = Path("build_app/android/app/build.gradle")
-          text = path.read_text()
+          app_path = Path(
+              "build_app/android/app/build.gradle"
+          )
 
-          if 'id "com.google.gms.google-services"' not in text:
-              marker = "plugins {"
-              index = text.find(marker)
+          app_text = app_path.read_text()
 
-              if index == -1:
-                  raise SystemExit(
-                      "Could not find plugins block in app/build.gradle"
-                  )
+          if 'id "com.google.gms.google-services"' not in app_text:
+              marker = 'id "dev.flutter.flutter-gradle-plugin"'
 
-              insert_at = index + len(marker)
-
-              text = (
-                  text[:insert_at]
-                  + '\n    id "com.google.gms.google-services"'
-                  + text[insert_at:]
+              app_text = app_text.replace(
+                  marker,
+                  marker + '\n    id "com.google.gms.google-services"'
               )
 
-          path.write_text(text)
+          app_path.write_text(app_text)
           PY
 
       # ============================================================
@@ -166,12 +165,20 @@ jobs:
       # ============================================================
       - name: Verify Firebase Android configuration
         run: |
+          echo "Checking Firebase Android configuration..."
+
           test -f build_app/android/app/google-services.json
-          grep -q '"project_info"' build_app/android/app/google-services.json
-          grep -q '"client"' build_app/android/app/google-services.json
+
+          grep -q '"package_name": "com.kothafinder.nepal"' \
+            build_app/android/app/google-services.json
+
+          grep -q 'com.google.gms.google-services' \
+            build_app/android/app/build.gradle
+
+          echo "Firebase Android configuration verified."
 
       # ============================================================
-      # 12. CREATE COMPLETE APPLICATION
+      # 12. CREATE COMPLETE KOTHAFINDER APPLICATION
       # ============================================================
       - name: Create application
         run: |
@@ -184,62 +191,167 @@ jobs:
           import 'package:flutter/material.dart';
           import 'package:url_launcher/url_launcher.dart';
 
-          final FirebaseAuth auth = FirebaseAuth.instance;
-          final FirebaseFirestore db = FirebaseFirestore.instance;
+          // ============================================================
+          // FIREBASE ACCESSORS
+          //
+          // IMPORTANT:
+          // These are getters instead of top-level initialized objects.
+          // Firebase must be initialized before FirebaseAuth.instance or
+          // FirebaseFirestore.instance is accessed.
+          // ============================================================
+
+          FirebaseAuth get auth => FirebaseAuth.instance;
+
+          FirebaseFirestore get db => FirebaseFirestore.instance;
+
+          // ============================================================
+          // MAIN
+          // ============================================================
 
           Future<void> main() async {
             WidgetsFlutterBinding.ensureInitialized();
 
-            await Firebase.initializeApp();
+            try {
+              await Firebase.initializeApp();
+            } catch (e) {
+              runApp(
+                FirebaseStartupError(
+                  error: e,
+                ),
+              );
+              return;
+            }
 
-            runApp(const KothaFinderApp());
+            runApp(
+              const KothaFinderApp(),
+            );
           }
 
-          class KothaFinderApp extends StatelessWidget {
-            const KothaFinderApp({super.key});
+          // ============================================================
+          // FIREBASE STARTUP ERROR
+          // ============================================================
+
+          class FirebaseStartupError extends StatelessWidget {
+            final Object error;
+
+            const FirebaseStartupError({
+              super.key,
+              required this.error,
+            });
 
             @override
             Widget build(BuildContext context) {
               return MaterialApp(
                 debugShowCheckedModeBanner: false,
+                home: Scaffold(
+                  body: SafeArea(
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisAlignment:
+                                MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.error_outline,
+                                size: 72,
+                              ),
+                              const SizedBox(height: 20),
+                              const Text(
+                                'Firebase initialization failed',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                error.toString(),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }
+          }
+
+          // ============================================================
+          // APP
+          // ============================================================
+
+          class KothaFinderApp extends StatelessWidget {
+            const KothaFinderApp({
+              super.key,
+            });
+
+            @override
+            Widget build(BuildContext context) {
+              return MaterialApp(
                 title: 'KothaFinder Nepal',
+                debugShowCheckedModeBanner: false,
                 theme: ThemeData(
                   useMaterial3: true,
-                  colorSchemeSeed: const Color(0xFF3156D3),
-                  scaffoldBackgroundColor: const Color(0xFFF7F8FC),
-                  inputDecorationTheme: const InputDecorationTheme(
-                    border: OutlineInputBorder(),
-                  ),
+                  colorSchemeSeed: Colors.blue,
                 ),
                 home: const AuthGate(),
               );
             }
           }
 
+          // ============================================================
+          // AUTH GATE
+          // ============================================================
+
           class AuthGate extends StatelessWidget {
-            const AuthGate({super.key});
+            const AuthGate({
+              super.key,
+            });
 
             @override
             Widget build(BuildContext context) {
               return StreamBuilder<User?>(
                 stream: auth.authStateChanges(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
+                builder: (
+                  context,
+                  snapshot,
+                ) {
+                  if (snapshot.connectionState ==
+                      ConnectionState.waiting) {
                     return const LoadingScreen();
                   }
 
-                  if (!snapshot.hasData) {
+                  final user = snapshot.data;
+
+                  if (user == null) {
                     return const AuthScreen();
                   }
 
-                  return RoleGate(userId: snapshot.data!.uid);
+                  return RoleGate(
+                    user: user,
+                  );
                 },
               );
             }
           }
 
+          // ============================================================
+          // LOADING SCREEN
+          // ============================================================
+
           class LoadingScreen extends StatelessWidget {
-            const LoadingScreen({super.key});
+            const LoadingScreen({
+              super.key,
+            });
 
             @override
             Widget build(BuildContext context) {
@@ -251,44 +363,69 @@ jobs:
             }
           }
 
+          // ============================================================
+          // ROLE GATE
+          // ============================================================
+
           class RoleGate extends StatelessWidget {
-            final String userId;
+            final User user;
 
             const RoleGate({
               super.key,
-              required this.userId,
+              required this.user,
             });
 
             @override
             Widget build(BuildContext context) {
-              return StreamBuilder<
+              return FutureBuilder<
                   DocumentSnapshot<Map<String, dynamic>>>(
-                stream: db.collection('users').doc(userId).snapshots(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
+                future: db
+                    .collection('users')
+                    .doc(user.uid)
+                    .get(),
+                builder: (
+                  context,
+                  snapshot,
+                ) {
+                  if (snapshot.connectionState ==
+                      ConnectionState.waiting) {
                     return const LoadingScreen();
                   }
 
                   if (snapshot.hasError) {
                     return ErrorScreen(
-                      message: 'Could not load your account.',
+                      message: snapshot.error.toString(),
                     );
                   }
 
                   final data = snapshot.data?.data();
-                  final role = data?['role'];
+
+                  if (data == null) {
+                    return const AuthScreen();
+                  }
+
+                  final role = data['role'];
 
                   if (role == 'landlord') {
                     return const LandlordHome();
                   }
 
-                  return CustomerHome(
-                    needsRole: role == null,
+                  if (role == 'customer') {
+                    return const CustomerHome();
+                  }
+
+                  return ErrorScreen(
+                    message:
+                        'Unknown account role. Please contact support.',
                   );
                 },
               );
             }
           }
+
+          // ============================================================
+          // ERROR SCREEN
+          // ============================================================
 
           class ErrorScreen extends StatelessWidget {
             final String message;
@@ -301,29 +438,15 @@ jobs:
             @override
             Widget build(BuildContext context) {
               return Scaffold(
+                appBar: AppBar(
+                  title: const Text('Error'),
+                ),
                 body: Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.error_outline,
-                          size: 56,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          message,
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 20),
-                        FilledButton(
-                          onPressed: () {
-                            auth.signOut();
-                          },
-                          child: const Text('Sign out'),
-                        ),
-                      ],
+                    child: Text(
+                      message,
+                      textAlign: TextAlign.center,
                     ),
                   ),
                 ),
@@ -331,19 +454,26 @@ jobs:
             }
           }
 
+          // ============================================================
+          // AUTH SCREEN
+          // ============================================================
+
           class AuthScreen extends StatefulWidget {
-            const AuthScreen({super.key});
+            const AuthScreen({
+              super.key,
+            });
 
             @override
-            State<AuthScreen> createState() => _AuthScreenState();
+            State<AuthScreen> createState() =>
+                _AuthScreenState();
           }
 
           class _AuthScreenState extends State<AuthScreen> {
             final emailController = TextEditingController();
-            final passwordController = TextEditingController();
+            final passwordController =
+                TextEditingController();
 
             bool loading = false;
-            bool obscurePassword = true;
 
             @override
             void dispose() {
@@ -353,10 +483,14 @@ jobs:
             }
 
             Future<void> login() async {
-              final email = emailController.text.trim();
-              final password = passwordController.text.trim();
+              final email =
+                  emailController.text.trim();
 
-              if (email.isEmpty || password.isEmpty) {
+              final password =
+                  passwordController.text.trim();
+
+              if (email.isEmpty ||
+                  password.isEmpty) {
                 showMessage(
                   context,
                   'Please enter email and password.',
@@ -403,103 +537,87 @@ jobs:
                   child: Center(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.all(24),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          maxWidth: 480,
-                        ),
-                        child: Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Column(
-                              children: [
-                                const Icon(
-                                  Icons.home_work_rounded,
-                                  size: 64,
-                                ),
-                                const SizedBox(height: 16),
-                                const Text(
-                                  'KothaFinder Nepal',
-                                  style: TextStyle(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'Find rooms and properties in Nepal',
-                                  textAlign: TextAlign.center,
-                                ),
-                                const SizedBox(height: 28),
-                                TextField(
-                                  controller: emailController,
-                                  keyboardType:
-                                      TextInputType.emailAddress,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Email',
-                                    prefixIcon: Icon(Icons.email_outlined),
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                TextField(
-                                  controller: passwordController,
-                                  obscureText: obscurePassword,
-                                  decoration: InputDecoration(
-                                    labelText: 'Password',
-                                    prefixIcon:
-                                        const Icon(Icons.lock_outline),
-                                    suffixIcon: IconButton(
-                                      onPressed: () {
-                                        setState(() {
-                                          obscurePassword =
-                                              !obscurePassword;
-                                        });
-                                      },
-                                      icon: Icon(
-                                        obscurePassword
-                                            ? Icons.visibility
-                                            : Icons.visibility_off,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 20),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: FilledButton(
-                                    onPressed: loading ? null : login,
-                                    child: loading
-                                        ? const SizedBox(
-                                            height: 20,
-                                            width: 20,
-                                            child:
-                                                CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                            ),
-                                          )
-                                        : const Text('Login'),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                TextButton(
-                                  onPressed: loading
-                                      ? null
-                                      : () {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (_) =>
-                                                  const RegisterScreen(),
-                                            ),
-                                          );
-                                        },
-                                  child: const Text(
-                                    'Create a new account',
-                                  ),
-                                ),
-                              ],
+                      child: Column(
+                        children: [
+                          const Icon(
+                            Icons.home_work_outlined,
+                            size: 72,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'KothaFinder Nepal',
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                        ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Find your next room or property',
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 32),
+                          TextField(
+                            controller: emailController,
+                            keyboardType:
+                                TextInputType.emailAddress,
+                            decoration:
+                                const InputDecoration(
+                              labelText: 'Email',
+                              border:
+                                  OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller:
+                                passwordController,
+                            obscureText: true,
+                            decoration:
+                                const InputDecoration(
+                              labelText: 'Password',
+                              border:
+                                  OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton(
+                              onPressed:
+                                  loading ? null : login,
+                              child: loading
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child:
+                                          CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Text('Login'),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton(
+                              onPressed: loading
+                                  ? null
+                                  : () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const RegisterScreen(),
+                                        ),
+                                      );
+                                    },
+                              child:
+                                  const Text('Create Account'),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -508,17 +626,26 @@ jobs:
             }
           }
 
+          // ============================================================
+          // REGISTER SCREEN
+          // ============================================================
+
           class RegisterScreen extends StatefulWidget {
-            const RegisterScreen({super.key});
+            const RegisterScreen({
+              super.key,
+            });
 
             @override
-            State<RegisterScreen> createState() => _RegisterScreenState();
+            State<RegisterScreen> createState() =>
+                _RegisterScreenState();
           }
 
-          class _RegisterScreenState extends State<RegisterScreen> {
+          class _RegisterScreenState
+              extends State<RegisterScreen> {
             final nameController = TextEditingController();
             final emailController = TextEditingController();
-            final passwordController = TextEditingController();
+            final passwordController =
+                TextEditingController();
 
             String role = 'customer';
             bool loading = false;
@@ -532,16 +659,21 @@ jobs:
             }
 
             Future<void> register() async {
-              final name = nameController.text.trim();
-              final email = emailController.text.trim();
-              final password = passwordController.text.trim();
+              final name =
+                  nameController.text.trim();
+
+              final email =
+                  emailController.text.trim();
+
+              final password =
+                  passwordController.text.trim();
 
               if (name.isEmpty ||
                   email.isEmpty ||
                   password.isEmpty) {
                 showMessage(
                   context,
-                  'Please complete all fields.',
+                  'Please fill all fields.',
                 );
                 return;
               }
@@ -549,7 +681,7 @@ jobs:
               if (password.length < 6) {
                 showMessage(
                   context,
-                  'Password must contain at least 6 characters.',
+                  'Password must be at least 6 characters.',
                 );
                 return;
               }
@@ -559,8 +691,8 @@ jobs:
               });
 
               try {
-                final credential =
-                    await auth.createUserWithEmailAndPassword(
+                final credential = await auth
+                    .createUserWithEmailAndPassword(
                   email: email,
                   password: password,
                 );
@@ -568,17 +700,23 @@ jobs:
                 final user = credential.user;
 
                 if (user == null) {
-                  throw Exception('Account creation failed.');
+                  throw Exception(
+                    'Account creation failed.',
+                  );
                 }
 
                 await user.updateDisplayName(name);
 
-                await db.collection('users').doc(user.uid).set({
+                await db
+                    .collection('users')
+                    .doc(user.uid)
+                    .set({
                   'uid': user.uid,
                   'name': name,
                   'email': email,
                   'role': role,
-                  'createdAt': FieldValue.serverTimestamp(),
+                  'createdAt':
+                      FieldValue.serverTimestamp(),
                 });
 
                 if (!mounted) return;
@@ -589,7 +727,8 @@ jobs:
 
                 showMessage(
                   context,
-                  e.message ?? 'Registration failed.',
+                  e.message ??
+                      'Registration failed.',
                 );
               } catch (e) {
                 if (!mounted) return;
@@ -611,19 +750,22 @@ jobs:
             Widget build(BuildContext context) {
               return Scaffold(
                 appBar: AppBar(
-                  title: const Text('Create Account'),
+                  title: const Text(
+                    'Create Account',
+                  ),
                 ),
                 body: SafeArea(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(24),
                     child: Column(
                       children: [
                         TextField(
                           controller: nameController,
-                          textCapitalization: TextCapitalization.words,
-                          decoration: const InputDecoration(
-                            labelText: 'Full name',
-                            prefixIcon: Icon(Icons.person_outline),
+                          decoration:
+                              const InputDecoration(
+                            labelText: 'Name',
+                            border:
+                                OutlineInputBorder(),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -631,50 +773,55 @@ jobs:
                           controller: emailController,
                           keyboardType:
                               TextInputType.emailAddress,
-                          decoration: const InputDecoration(
+                          decoration:
+                              const InputDecoration(
                             labelText: 'Email',
-                            prefixIcon: Icon(Icons.email_outlined),
+                            border:
+                                OutlineInputBorder(),
                           ),
                         ),
                         const SizedBox(height: 16),
                         TextField(
-                          controller: passwordController,
+                          controller:
+                              passwordController,
                           obscureText: true,
-                          decoration: const InputDecoration(
+                          decoration:
+                              const InputDecoration(
                             labelText: 'Password',
-                            prefixIcon: Icon(Icons.lock_outline),
+                            border:
+                                OutlineInputBorder(),
                           ),
                         ),
-                        const SizedBox(height: 20),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            'Account type',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium,
+                        const SizedBox(height: 16),
+                        DropdownButtonFormField<String>(
+                          value: role,
+                          decoration:
+                              const InputDecoration(
+                            labelText: 'Account Type',
+                            border:
+                                OutlineInputBorder(),
                           ),
-                        ),
-                        const SizedBox(height: 8),
-                        SegmentedButton<String>(
-                          segments: const [
-                            ButtonSegment(
+                          items: const [
+                            DropdownMenuItem(
                               value: 'customer',
-                              label: Text('Customer'),
-                              icon: Icon(Icons.person),
+                              child:
+                                  Text('Customer'),
                             ),
-                            ButtonSegment(
+                            DropdownMenuItem(
                               value: 'landlord',
-                              label: Text('Landlord'),
-                              icon: Icon(Icons.home_work),
+                              child:
+                                  Text('Landlord'),
                             ),
                           ],
-                          selected: {role},
-                          onSelectionChanged: loading
+                          onChanged: loading
                               ? null
-                              : (selection) {
+                              : (value) {
+                                  if (value == null) {
+                                    return;
+                                  }
+
                                   setState(() {
-                                    role = selection.first;
+                                    role = value;
                                   });
                                 },
                         ),
@@ -682,7 +829,8 @@ jobs:
                         SizedBox(
                           width: double.infinity,
                           child: FilledButton(
-                            onPressed: loading ? null : register,
+                            onPressed:
+                                loading ? null : register,
                             child: loading
                                 ? const SizedBox(
                                     height: 20,
@@ -692,7 +840,9 @@ jobs:
                                       strokeWidth: 2,
                                     ),
                                   )
-                                : const Text('Create Account'),
+                                : const Text(
+                                    'Register',
+                                  ),
                           ),
                         ),
                       ],
@@ -703,25 +853,30 @@ jobs:
             }
           }
 
-          class CustomerHome extends StatefulWidget {
-            final bool needsRole;
+          // ============================================================
+          // CUSTOMER HOME
+          // ============================================================
 
+          class CustomerHome extends StatefulWidget {
             const CustomerHome({
               super.key,
-              this.needsRole = false,
             });
 
             @override
-            State<CustomerHome> createState() => _CustomerHomeState();
+            State<CustomerHome> createState() =>
+                _CustomerHomeState();
           }
 
-          class _CustomerHomeState extends State<CustomerHome> {
-            final searchController = TextEditingController();
+          class _CustomerHomeState
+              extends State<CustomerHome> {
+            final searchController =
+                TextEditingController();
 
-            String selectedType = 'All';
-            String selectedFurnished = 'All';
-            int minBedrooms = 0;
-            bool onlyAvailable = false;
+            String search = '';
+            String? propertyType;
+            String? furnished;
+            int? minimumBedrooms;
+            bool onlyAvailable = true;
 
             @override
             void dispose() {
@@ -729,131 +884,84 @@ jobs:
               super.dispose();
             }
 
-            List<QueryDocumentSnapshot<Map<String, dynamic>>>
-                filterProperties(
-              List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-            ) {
-              final search =
-                  searchController.text.trim().toLowerCase();
-
-              final filtered = docs.where((doc) {
-                final data = doc.data();
-
-                final title =
-                    (data['title'] ?? '').toString().toLowerCase();
-                final location =
-                    (data['location'] ?? '').toString().toLowerCase();
-
-                final propertyType =
-                    (data['propertyType'] ?? 'Room').toString();
-
-                final furnished =
-                    (data['furnished'] ?? 'Unfurnished').toString();
-
-                final bedrooms =
-                    int.tryParse(
-                          '${data['bedrooms'] ?? 0}',
-                        ) ??
-                        0;
-
-                final available =
-                    data['available'] == true;
-
-                final searchMatch = search.isEmpty ||
-                    title.contains(search) ||
-                    location.contains(search);
-
-                final typeMatch = selectedType == 'All' ||
-                    propertyType == selectedType;
-
-                final furnishedMatch =
-                    selectedFurnished == 'All' ||
-                        furnished == selectedFurnished;
-
-                final bedroomMatch = bedrooms >= minBedrooms;
-
-                final availabilityMatch =
-                    !onlyAvailable || available;
-
-                return searchMatch &&
-                    typeMatch &&
-                    furnishedMatch &&
-                    bedroomMatch &&
-                    availabilityMatch;
-              }).toList();
-
-              filtered.sort((a, b) {
-                final aTime = a.data()['createdAt'];
-                final bTime = b.data()['createdAt'];
-
-                if (aTime is Timestamp && bTime is Timestamp) {
-                  return bTime.compareTo(aTime);
-                }
-
-                return 0;
-              });
-
-              return filtered;
+            Future<void> logout() async {
+              await auth.signOut();
             }
 
-            Future<void> openFilters() async {
-              final result = await showModalBottomSheet<
-                  Map<String, dynamic>>(
+            void openFilters() {
+              showModalBottomSheet(
                 context: context,
                 isScrollControlled: true,
                 builder: (_) {
                   return _FilterSheet(
-                    selectedType: selectedType,
-                    selectedFurnished: selectedFurnished,
-                    minBedrooms: minBedrooms,
+                    propertyType: propertyType,
+                    furnished: furnished,
+                    minimumBedrooms:
+                        minimumBedrooms,
                     onlyAvailable: onlyAvailable,
+                    onApply: (
+                      type,
+                      furnishedValue,
+                      bedrooms,
+                      available,
+                    ) {
+                      setState(() {
+                        propertyType = type;
+                        furnished =
+                            furnishedValue;
+                        minimumBedrooms =
+                            bedrooms;
+                        onlyAvailable =
+                            available;
+                      });
+                    },
                   );
                 },
               );
-
-              if (result == null || !mounted) return;
-
-              setState(() {
-                selectedType =
-                    result['propertyType'] as String;
-                selectedFurnished =
-                    result['furnished'] as String;
-                minBedrooms =
-                    result['minBedrooms'] as int;
-                onlyAvailable =
-                    result['onlyAvailable'] as bool;
-              });
             }
 
             @override
             Widget build(BuildContext context) {
+              final currentUser = auth.currentUser;
+
+              if (currentUser == null) {
+                return const AuthScreen();
+              }
+
               return Scaffold(
                 appBar: AppBar(
-                  title: const Text('KothaFinder Nepal'),
+                  title:
+                      const Text('KothaFinder Nepal'),
                   actions: [
                     StreamBuilder<
-                        QuerySnapshot<Map<String, dynamic>>>(
+                        QuerySnapshot<
+                            Map<String, dynamic>>>(
                       stream: db
                           .collection('inquiries')
                           .where(
                             'customerId',
-                            isEqualTo: auth.currentUser?.uid,
+                            isEqualTo:
+                                currentUser.uid,
                           )
                           .snapshots(),
-                      builder: (context, snapshot) {
-                        int unread = 0;
+                      builder: (
+                        context,
+                        snapshot,
+                      ) {
+                        final docs =
+                            snapshot.data?.docs ?? [];
 
-                        if (snapshot.hasData) {
-                          unread = snapshot.data!.docs.where((doc) {
-                            final data = doc.data();
-                            return data['isRead'] != true;
-                          }).length;
-                        }
+                        final unread = docs
+                            .where(
+                              (doc) =>
+                                  doc.data()['isRead'] !=
+                                  true,
+                            )
+                            .length;
 
                         return Stack(
                           children: [
                             IconButton(
-                              tooltip: 'My Inquiries',
                               onPressed: () {
                                 Navigator.push(
                                   context,
@@ -864,31 +972,22 @@ jobs:
                                 );
                               },
                               icon: const Icon(
-                                Icons.chat_bubble_outline,
+                                Icons.message_outlined,
                               ),
                             ),
                             if (unread > 0)
                               Positioned(
-                                right: 7,
-                                top: 6,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 5,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red,
-                                    borderRadius:
-                                        BorderRadius.circular(10),
-                                  ),
+                                right: 5,
+                                top: 5,
+                                child: CircleAvatar(
+                                  radius: 9,
                                   child: Text(
-                                    unread > 99
-                                        ? '99+'
+                                    unread > 9
+                                        ? '9+'
                                         : '$unread',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
+                                    style:
+                                        const TextStyle(
+                                      fontSize: 9,
                                     ),
                                   ),
                                 ),
@@ -898,328 +997,458 @@ jobs:
                       },
                     ),
                     IconButton(
-                      tooltip: 'Logout',
-                      onPressed: () async {
-                        await auth.signOut();
-                      },
-                      icon: const Icon(Icons.logout),
+                      onPressed: logout,
+                      icon:
+                          const Icon(Icons.logout),
                     ),
                   ],
                 ),
-                body: StreamBuilder<
-                    QuerySnapshot<Map<String, dynamic>>>(
-                  stream: db.collection('properties').snapshots(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState ==
-                        ConnectionState.waiting) {
-                      return const Center(
-                        child: CircularProgressIndicator(),
-                      );
-                    }
+                body: Column(
+                  children: [
+                    Padding(
+                      padding:
+                          const EdgeInsets.fromLTRB(
+                        16,
+                        16,
+                        16,
+                        8,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller:
+                                  searchController,
+                              onChanged: (value) {
+                                setState(() {
+                                  search =
+                                      value.trim()
+                                          .toLowerCase();
+                                });
+                              },
+                              decoration:
+                                  InputDecoration(
+                                hintText:
+                                    'Search location or property',
+                                prefixIcon:
+                                    const Icon(
+                                  Icons.search,
+                                ),
+                                border:
+                                    const OutlineInputBorder(),
+                                suffixIcon:
+                                    IconButton(
+                                  onPressed: () {
+                                    searchController
+                                        .clear();
 
-                    if (snapshot.hasError) {
-                      return Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Text(
-                            'Could not load properties.\n\n'
-                            '${snapshot.error}',
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      );
-                    }
-
-                    final docs = snapshot.data?.docs ?? [];
-                    final filtered = filterProperties(docs);
-
-                    return Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(
-                            16,
-                            16,
-                            16,
-                            8,
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: searchController,
-                                  onChanged: (_) {
-                                    setState(() {});
+                                    setState(() {
+                                      search = '';
+                                    });
                                   },
-                                  decoration: InputDecoration(
-                                    hintText:
-                                        'Search location or property',
-                                    prefixIcon:
-                                        const Icon(Icons.search),
-                                    suffixIcon:
-                                        searchController.text.isEmpty
-                                            ? null
-                                            : IconButton(
-                                                onPressed: () {
-                                                  searchController.clear();
-                                                  setState(() {});
-                                                },
-                                                icon: const Icon(
-                                                  Icons.clear,
-                                                ),
-                                              ),
+                                  icon:
+                                      const Icon(
+                                    Icons.clear,
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              IconButton.filledTonal(
-                                onPressed: openFilters,
-                                icon: const Icon(Icons.tune),
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
-                        Expanded(
-                          child: filtered.isEmpty
-                              ? const Center(
-                                  child: Padding(
-                                    padding: EdgeInsets.all(24),
-                                    child: Text(
-                                      'No properties found.\n'
-                                      'Try changing your search or filters.',
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ),
-                                )
-                              : ListView.builder(
-                                  padding: const EdgeInsets.all(12),
-                                  itemCount: filtered.length,
-                                  itemBuilder: (context, index) {
-                                    final doc = filtered[index];
+                          const SizedBox(width: 8),
+                          IconButton(
+                            onPressed: openFilters,
+                            icon:
+                                const Icon(Icons.tune),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: StreamBuilder<
+                          QuerySnapshot<
+                              Map<String, dynamic>>>(
+                        stream: db
+                            .collection('properties')
+                            .snapshots(),
+                        builder: (
+                          context,
+                          snapshot,
+                        ) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const Center(
+                              child:
+                                  CircularProgressIndicator(),
+                            );
+                          }
 
-                                    return PropertyCard(
-                                      doc: doc,
-                                      onTap: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) =>
-                                                PropertyDetailsScreen(
-                                              doc: doc,
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    );
-                                  },
+                          if (snapshot.hasError) {
+                            return Center(
+                              child: Padding(
+                                padding:
+                                    const EdgeInsets.all(
+                                  24,
                                 ),
-                        ),
-                      ],
-                    );
-                  },
+                                child: Text(
+                                  snapshot.error
+                                      .toString(),
+                                  textAlign:
+                                      TextAlign.center,
+                                ),
+                              ),
+                            );
+                          }
+
+                          final docs =
+                              snapshot.data?.docs ?? [];
+
+                          final filtered = docs.where(
+                            (doc) {
+                              final data =
+                                  doc.data();
+
+                              final title =
+                                  (data['title'] ??
+                                          '')
+                                      .toString()
+                                      .toLowerCase();
+
+                              final location =
+                                  (data['location'] ??
+                                          '')
+                                      .toString()
+                                      .toLowerCase();
+
+                              final type =
+                                  (data['propertyType'] ??
+                                          '')
+                                      .toString();
+
+                              final furnishedValue =
+                                  (data['furnished'] ??
+                                          '')
+                                      .toString();
+
+                              final bedrooms =
+                                  int.tryParse(
+                                        '${data['bedrooms'] ?? 0}',
+                                      ) ??
+                                      0;
+
+                              final available =
+                                  data['available'] !=
+                                      false;
+
+                              if (search.isNotEmpty &&
+                                  !title.contains(
+                                    search,
+                                  ) &&
+                                  !location.contains(
+                                    search,
+                                  )) {
+                                return false;
+                              }
+
+                              if (propertyType !=
+                                      null &&
+                                  propertyType!
+                                      .isNotEmpty &&
+                                  type !=
+                                      propertyType) {
+                                return false;
+                              }
+
+                              if (furnished !=
+                                      null &&
+                                  furnished!.isNotEmpty &&
+                                  furnishedValue !=
+                                      furnished) {
+                                return false;
+                              }
+
+                              if (minimumBedrooms !=
+                                      null &&
+                                  bedrooms <
+                                      minimumBedrooms!) {
+                                return false;
+                              }
+
+                              if (onlyAvailable &&
+                                  !available) {
+                                return false;
+                              }
+
+                              return true;
+                            },
+                          ).toList();
+
+                          if (filtered.isEmpty) {
+                            return const Center(
+                              child: Text(
+                                'No properties found.',
+                              ),
+                            );
+                          }
+
+                          return ListView.builder(
+                            padding:
+                                const EdgeInsets.all(
+                              16,
+                            ),
+                            itemCount:
+                                filtered.length,
+                            itemBuilder: (
+                              context,
+                              index,
+                            ) {
+                              final doc =
+                                  filtered[index];
+
+                              return PropertyCard(
+                                doc: doc,
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               );
             }
           }
 
+          // ============================================================
+          // FILTER SHEET
+          // ============================================================
+
           class _FilterSheet extends StatefulWidget {
-            final String selectedType;
-            final String selectedFurnished;
-            final int minBedrooms;
+            final String? propertyType;
+            final String? furnished;
+            final int? minimumBedrooms;
             final bool onlyAvailable;
 
+            final void Function(
+              String?,
+              String?,
+              int?,
+              bool,
+            ) onApply;
+
             const _FilterSheet({
-              required this.selectedType,
-              required this.selectedFurnished,
-              required this.minBedrooms,
+              required this.propertyType,
+              required this.furnished,
+              required this.minimumBedrooms,
               required this.onlyAvailable,
+              required this.onApply,
             });
 
             @override
-            State<_FilterSheet> createState() => _FilterSheetState();
+            State<_FilterSheet> createState() =>
+                _FilterSheetState();
           }
 
-          class _FilterSheetState extends State<_FilterSheet> {
-            late String type;
-            late String furnished;
-            late int bedrooms;
-            late bool available;
+          class _FilterSheetState
+              extends State<_FilterSheet> {
+            late String? propertyType =
+                widget.propertyType;
 
-            @override
-            void initState() {
-              super.initState();
+            late String? furnished =
+                widget.furnished;
 
-              type = widget.selectedType;
-              furnished = widget.selectedFurnished;
-              bedrooms = widget.minBedrooms;
-              available = widget.onlyAvailable;
-            }
+            late int? minimumBedrooms =
+                widget.minimumBedrooms;
+
+            late bool onlyAvailable =
+                widget.onlyAvailable;
 
             @override
             Widget build(BuildContext context) {
               return SafeArea(
                 child: Padding(
-                  padding: EdgeInsets.only(
-                    left: 20,
-                    right: 20,
-                    top: 20,
-                    bottom:
-                        MediaQuery.of(context).viewInsets.bottom + 20,
-                  ),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Expanded(
-                              child: Text(
-                                'Filters',
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            TextButton(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Filters',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight:
+                              FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        value: propertyType,
+                        decoration:
+                            const InputDecoration(
+                          labelText: 'Property Type',
+                          border:
+                              OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'Room',
+                            child: Text('Room'),
+                          ),
+                          DropdownMenuItem(
+                            value: '1BHK',
+                            child: Text('1BHK'),
+                          ),
+                          DropdownMenuItem(
+                            value: '2BHK',
+                            child: Text('2BHK'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'Flat',
+                            child: Text('Flat'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            propertyType = value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: furnished,
+                        decoration:
+                            const InputDecoration(
+                          labelText: 'Furnished',
+                          border:
+                              OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'Furnished',
+                            child:
+                                Text('Furnished'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'Unfurnished',
+                            child:
+                                Text('Unfurnished'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            furnished = value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<int>(
+                        value: minimumBedrooms,
+                        decoration:
+                            const InputDecoration(
+                          labelText:
+                              'Minimum Bedrooms',
+                          border:
+                              OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 1,
+                            child: Text('1+'),
+                          ),
+                          DropdownMenuItem(
+                            value: 2,
+                            child: Text('2+'),
+                          ),
+                          DropdownMenuItem(
+                            value: 3,
+                            child: Text('3+'),
+                          ),
+                          DropdownMenuItem(
+                            value: 4,
+                            child: Text('4+'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            minimumBedrooms =
+                                value;
+                          });
+                        },
+                      ),
+                      SwitchListTile(
+                        contentPadding:
+                            EdgeInsets.zero,
+                        title: const Text(
+                          'Available only',
+                        ),
+                        value: onlyAvailable,
+                        onChanged: (value) {
+                          setState(() {
+                            onlyAvailable =
+                                value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
                               onPressed: () {
-                                setState(() {
-                                  type = 'All';
-                                  furnished = 'All';
-                                  bedrooms = 0;
-                                  available = false;
-                                });
+                                widget.onApply(
+                                  null,
+                                  null,
+                                  null,
+                                  true,
+                                );
+
+                                Navigator.pop(
+                                  context,
+                                );
                               },
-                              child: const Text('Reset'),
+                              child:
+                                  const Text('Reset'),
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        DropdownButtonFormField<String>(
-                          value: type,
-                          decoration: const InputDecoration(
-                            labelText: 'Property type',
                           ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'All',
-                              child: Text('All'),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: () {
+                                widget.onApply(
+                                  propertyType,
+                                  furnished,
+                                  minimumBedrooms,
+                                  onlyAvailable,
+                                );
+
+                                Navigator.pop(
+                                  context,
+                                );
+                              },
+                              child:
+                                  const Text('Apply'),
                             ),
-                            DropdownMenuItem(
-                              value: 'Room',
-                              child: Text('Room'),
-                            ),
-                            DropdownMenuItem(
-                              value: '1BHK',
-                              child: Text('1BHK'),
-                            ),
-                            DropdownMenuItem(
-                              value: '2BHK',
-                              child: Text('2BHK'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'Flat',
-                              child: Text('Flat'),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            if (value != null) {
-                              setState(() {
-                                type = value;
-                              });
-                            }
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        DropdownButtonFormField<String>(
-                          value: furnished,
-                          decoration: const InputDecoration(
-                            labelText: 'Furnished status',
                           ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'All',
-                              child: Text('All'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'Furnished',
-                              child: Text('Furnished'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'Unfurnished',
-                              child: Text('Unfurnished'),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            if (value != null) {
-                              setState(() {
-                                furnished = value;
-                              });
-                            }
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Minimum bedrooms: $bedrooms',
-                        ),
-                        Slider(
-                          value: bedrooms.toDouble(),
-                          min: 0,
-                          max: 5,
-                          divisions: 5,
-                          label: '$bedrooms',
-                          onChanged: (value) {
-                            setState(() {
-                              bedrooms = value.round();
-                            });
-                          },
-                        ),
-                        SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text(
-                            'Available properties only',
-                          ),
-                          value: available,
-                          onChanged: (value) {
-                            setState(() {
-                              available = value;
-                            });
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton(
-                            onPressed: () {
-                              Navigator.pop(
-                                context,
-                                {
-                                  'propertyType': type,
-                                  'furnished': furnished,
-                                  'minBedrooms': bedrooms,
-                                  'onlyAvailable': available,
-                                },
-                              );
-                            },
-                            child: const Text('Apply Filters'),
-                          ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               );
             }
           }
 
+          // ============================================================
+          // PROPERTY CARD
+          // ============================================================
+
           class PropertyCard extends StatelessWidget {
-            final QueryDocumentSnapshot<Map<String, dynamic>> doc;
-            final VoidCallback onTap;
+            final QueryDocumentSnapshot<
+                Map<String, dynamic>> doc;
 
             const PropertyCard({
               super.key,
               required this.doc,
-              required this.onTap,
             });
 
             @override
@@ -1227,72 +1456,85 @@ jobs:
               final data = doc.data();
 
               final title =
-                  (data['title'] ?? 'Property').toString();
+                  data['title'] ?? 'Property';
+
               final location =
-                  (data['location'] ?? 'Location unavailable')
-                      .toString();
+                  data['location'] ?? '';
+
               final type =
-                  (data['propertyType'] ?? 'Room').toString();
-              final furnished =
-                  (data['furnished'] ?? 'Unfurnished').toString();
-              final rent =
-                  (data['monthlyRent'] ?? 0).toString();
+                  data['propertyType'] ?? '';
+
               final bedrooms =
-                  (data['bedrooms'] ?? 0).toString();
-              final available = data['available'] == true;
+                  data['bedrooms'] ?? 0;
+
+              final furnished =
+                  data['furnished'] ?? '';
+
+              final rent =
+                  data['monthlyRent'] ?? 0;
+
+              final available =
+                  data['available'] != false;
 
               return Card(
-                margin: const EdgeInsets.only(bottom: 12),
+                margin: const EdgeInsets.only(
+                  bottom: 12,
+                ),
                 child: InkWell(
-                  onTap: onTap,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius:
+                      BorderRadius.circular(12),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            PropertyDetailsScreen(
+                          doc: doc,
+                        ),
+                      ),
+                    );
+                  },
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding:
+                        const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment:
                           CrossAxisAlignment.start,
                       children: [
                         Row(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.start,
                           children: [
                             Expanded(
                               child: Text(
-                                title,
-                                style: const TextStyle(
+                                title.toString(),
+                                style:
+                                    const TextStyle(
                                   fontSize: 18,
-                                  fontWeight: FontWeight.bold,
+                                  fontWeight:
+                                      FontWeight.bold,
                                 ),
                               ),
                             ),
-                            _StatusChip(
-                              label: available
-                                  ? 'Available'
-                                  : 'Unavailable',
-                              positive: available,
+                            Chip(
+                              label: Text(
+                                available
+                                    ? 'Available'
+                                    : 'Unavailable',
+                              ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.location_on_outlined,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(location),
-                            ),
-                          ],
+                        Text(
+                          location.toString(),
                         ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 8),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
                           children: [
                             Chip(
-                              label: Text(type),
+                              label:
+                                  Text(type.toString()),
                             ),
                             Chip(
                               label: Text(
@@ -1300,16 +1542,19 @@ jobs:
                               ),
                             ),
                             Chip(
-                              label: Text(furnished),
+                              label: Text(
+                                furnished.toString(),
+                              ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 8),
                         Text(
-                          'Rs. $rent / month',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 17,
+                          'Rent: Rs. $rent / month',
+                          style:
+                              const TextStyle(
+                            fontWeight:
+                                FontWeight.bold,
                           ),
                         ),
                       ],
@@ -1320,8 +1565,14 @@ jobs:
             }
           }
 
-          class PropertyDetailsScreen extends StatelessWidget {
-            final QueryDocumentSnapshot<Map<String, dynamic>> doc;
+          // ============================================================
+          // PROPERTY DETAILS
+          // ============================================================
+
+          class PropertyDetailsScreen
+              extends StatelessWidget {
+            final QueryDocumentSnapshot<
+                Map<String, dynamic>> doc;
 
             const PropertyDetailsScreen({
               super.key,
@@ -1331,19 +1582,6 @@ jobs:
             Future<void> contactLandlord(
               BuildContext context,
             ) async {
-              final data = doc.data();
-
-              final landlordId =
-                  (data['landlordId'] ?? '').toString();
-
-              if (landlordId.isEmpty) {
-                showMessage(
-                  context,
-                  'Landlord information is unavailable.',
-                );
-                return;
-              }
-
               final customer = auth.currentUser;
 
               if (customer == null) {
@@ -1354,137 +1592,175 @@ jobs:
                 return;
               }
 
-              final customerDoc = await db
-                  .collection('users')
-                  .doc(customer.uid)
-                  .get();
+              final data = doc.data();
 
-              final landlordDoc = await db
-                  .collection('users')
-                  .doc(landlordId)
-                  .get();
+              final landlordId =
+                  data['landlordId']
+                      ?.toString();
 
-              if (!context.mounted) return;
+              if (landlordId == null ||
+                  landlordId.isEmpty) {
+                showMessage(
+                  context,
+                  'Landlord information is unavailable.',
+                );
+                return;
+              }
 
-              final customerData = customerDoc.data() ?? {};
-              final landlordData = landlordDoc.data() ?? {};
+              try {
+                final customerDoc = await db
+                    .collection('users')
+                    .doc(customer.uid)
+                    .get();
 
-              final messageController =
-                  TextEditingController();
+                final landlordDoc = await db
+                    .collection('users')
+                    .doc(landlordId)
+                    .get();
 
-              final sent = await showDialog<bool>(
-                context: context,
-                builder: (dialogContext) {
-                  return AlertDialog(
-                    title: const Text('Contact Landlord'),
-                    content: SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Landlord: '
-                            '${landlordData['name'] ?? 'Landlord'}',
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Email: '
-                            '${landlordData['email'] ?? ''}',
-                          ),
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: messageController,
-                            minLines: 4,
-                            maxLines: 6,
-                            maxLength: 1000,
-                            decoration: const InputDecoration(
-                              labelText: 'Your message',
-                              hintText:
-                                  'I am interested in this property...',
-                              alignLabelWithHint: true,
+                if (!landlordDoc.exists) {
+                  if (!context.mounted) return;
+
+                  showMessage(
+                    context,
+                    'Landlord account not found.',
+                  );
+                  return;
+                }
+
+                final customerData =
+                    customerDoc.data() ?? {};
+
+                final landlordData =
+                    landlordDoc.data() ?? {};
+
+                final controller =
+                    TextEditingController();
+
+                final message =
+                    await showDialog<String>(
+                  context: context,
+                  builder: (dialogContext) {
+                    return AlertDialog(
+                      title: const Text(
+                        'Contact Landlord',
+                      ),
+                      content: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize:
+                              MainAxisSize.min,
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Landlord: ${landlordData['name'] ?? 'Landlord'}',
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 4),
+                            Text(
+                              'Email: ${landlordData['email'] ?? ''}',
+                            ),
+                            const SizedBox(height: 16),
+                            TextField(
+                              controller:
+                                  controller,
+                              maxLines: 5,
+                              decoration:
+                                  const InputDecoration(
+                                labelText: 'Message',
+                                hintText:
+                                    'I am interested in this property...',
+                                border:
+                                    OutlineInputBorder(),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pop(dialogContext, false);
-                        },
-                        child: const Text('Cancel'),
-                      ),
-                      FilledButton(
-                        onPressed: () async {
-                          final message =
-                              messageController.text.trim();
-
-                          if (message.isEmpty) {
-                            showMessage(
+                      actions: [
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(
                               dialogContext,
-                              'Please enter a message.',
                             );
-                            return;
-                          }
+                          },
+                          child:
+                              const Text('Cancel'),
+                        ),
+                        FilledButton(
+                          onPressed: () {
+                            final value =
+                                controller.text
+                                    .trim();
 
-                          try {
-                            await db
-                                .collection('inquiries')
-                                .add({
-                              'customerId': customer.uid,
-                              'customerName':
-                                  customerData['name'] ??
-                                      customer.displayName ??
-                                      'Customer',
-                              'customerEmail':
-                                  customerData['email'] ??
-                                      customer.email ??
-                                      '',
-                              'landlordId': landlordId,
-                              'landlordName':
-                                  landlordData['name'] ??
-                                      'Landlord',
-                              'landlordEmail':
-                                  landlordData['email'] ?? '',
-                              'propertyId': doc.id,
-                              'propertyTitle':
-                                  data['title'] ?? 'Property',
-                              'message': message,
-                              'status': 'new',
-                              'isRead': false,
-                              'createdAt':
-                                  FieldValue.serverTimestamp(),
-                            });
-
-                            if (dialogContext.mounted) {
-                              Navigator.pop(
-                                dialogContext,
-                                true,
-                              );
-                            }
-                          } catch (e) {
-                            if (dialogContext.mounted) {
+                            if (value.isEmpty) {
                               showMessage(
                                 dialogContext,
-                                'Could not send inquiry: $e',
+                                'Please enter a message.',
                               );
+                              return;
                             }
-                          }
-                        },
-                        child: const Text('Send Inquiry'),
-                      ),
-                    ],
-                  );
-                },
-              );
 
-              messageController.dispose();
+                            Navigator.pop(
+                              dialogContext,
+                              value,
+                            );
+                          },
+                          child:
+                              const Text('Send'),
+                        ),
+                      ],
+                    );
+                  },
+                );
 
-              if (sent == true && context.mounted) {
+                controller.dispose();
+
+                if (message == null ||
+                    message.trim().isEmpty) {
+                  return;
+                }
+
+                await db
+                    .collection('inquiries')
+                    .add({
+                  'customerId':
+                      customer.uid,
+                  'customerName':
+                      customerData['name'] ??
+                          customer.displayName ??
+                          'Customer',
+                  'customerEmail':
+                      customerData['email'] ??
+                          customer.email ??
+                          '',
+                  'landlordId': landlordId,
+                  'landlordName':
+                      landlordData['name'] ??
+                          'Landlord',
+                  'landlordEmail':
+                      landlordData['email'] ?? '',
+                  'propertyId': doc.id,
+                  'propertyTitle':
+                      data['title'] ?? 'Property',
+                  'message': message,
+                  'status': 'new',
+                  'isRead': false,
+                  'createdAt':
+                      FieldValue.serverTimestamp(),
+                });
+
+                if (!context.mounted) return;
+
                 showMessage(
                   context,
                   'Inquiry sent successfully.',
+                );
+              } catch (e) {
+                if (!context.mounted) return;
+
+                showMessage(
+                  context,
+                  'Could not send inquiry: $e',
                 );
               }
             }
@@ -1494,138 +1770,191 @@ jobs:
               final data = doc.data();
 
               final title =
-                  (data['title'] ?? 'Property').toString();
+                  data['title'] ?? 'Property';
+
               final location =
-                  (data['location'] ?? '').toString();
+                  data['location'] ?? '';
+
               final type =
-                  (data['propertyType'] ?? 'Room').toString();
-              final furnished =
-                  (data['furnished'] ?? 'Unfurnished')
-                      .toString();
+                  data['propertyType'] ?? '';
+
               final rent =
-                  (data['monthlyRent'] ?? 0).toString();
+                  data['monthlyRent'] ?? 0;
+
               final discount =
-                  (data['discount'] ?? 0).toString();
+                  data['discount'] ?? 0;
+
               final bedrooms =
-                  (data['bedrooms'] ?? 0).toString();
+                  data['bedrooms'] ?? 0;
+
               final bathrooms =
-                  (data['bathrooms'] ?? 0).toString();
+                  data['bathrooms'] ?? 0;
+
               final description =
-                  (data['description'] ?? '').toString();
+                  data['description'] ?? '';
+
+              final furnished =
+                  data['furnished'] ?? '';
+
               final available =
-                  data['available'] == true;
+                  data['available'] != false;
 
               return Scaffold(
                 appBar: AppBar(
-                  title: const Text('Property Details'),
+                  title:
+                      const Text('Property Details'),
                 ),
-                body: ListView(
+                body: SingleChildScrollView(
                   padding: const EdgeInsets.all(20),
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.bold,
+                  child: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title.toString(),
+                        style:
+                            const TextStyle(
+                          fontSize: 26,
+                          fontWeight:
+                              FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        const Icon(Icons.location_on_outlined),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            location.isEmpty
-                                ? 'Location unavailable'
-                                : location,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    _StatusChip(
-                      label: available
-                          ? 'Available'
-                          : 'Unavailable',
-                      positive: available,
-                    ),
-                    const SizedBox(height: 20),
-                    _InfoSection(
-                      title: 'Property Information',
-                      children: [
-                        _InfoRow(
-                          label: 'Property type',
-                          value: type,
-                        ),
-                        _InfoRow(
-                          label: 'Bedrooms',
-                          value: bedrooms,
-                        ),
-                        _InfoRow(
-                          label: 'Bathrooms',
-                          value: bathrooms,
-                        ),
-                        _InfoRow(
-                          label: 'Furnished',
-                          value: furnished,
-                        ),
-                        _InfoRow(
-                          label: 'Monthly rent',
-                          value: 'Rs. $rent',
-                        ),
-                        if (discount != '0' &&
-                            discount.isNotEmpty)
-                          _InfoRow(
-                            label: 'Discount',
-                            value: 'Rs. $discount',
-                          ),
-                      ],
-                    ),
-                    if (description.isNotEmpty) ...[
-                      const SizedBox(height: 20),
-                      _InfoSection(
-                        title: 'Description',
+                      const SizedBox(height: 12),
+                      Row(
                         children: [
-                          Text(description),
+                          const Icon(
+                            Icons.location_on_outlined,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              location.toString(),
+                            ),
+                          ),
                         ],
                       ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          Chip(
+                            label:
+                                Text(type.toString()),
+                          ),
+                          Chip(
+                            label: Text(
+                              '$bedrooms bedroom(s)',
+                            ),
+                          ),
+                          Chip(
+                            label: Text(
+                              '$bathrooms bathroom(s)',
+                            ),
+                          ),
+                          Chip(
+                            label: Text(
+                              furnished.toString(),
+                            ),
+                          ),
+                          Chip(
+                            label: Text(
+                              available
+                                  ? 'Available'
+                                  : 'Unavailable',
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      _InfoSection(
+                        title: 'Rent',
+                        child: Text(
+                          'Rs. $rent / month',
+                          style:
+                              const TextStyle(
+                            fontSize: 20,
+                            fontWeight:
+                                FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      if (discount
+                          .toString()
+                          .isNotEmpty &&
+                          discount.toString() != '0')
+                        _InfoSection(
+                          title: 'Discount',
+                          child: Text(
+                            'Rs. $discount',
+                          ),
+                        ),
+                      _InfoSection(
+                        title: 'Description',
+                        child: Text(
+                          description
+                              .toString()
+                              .isEmpty
+                              ? 'No description provided.'
+                              : description
+                                  .toString(),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed:
+                              location
+                                      .toString()
+                                      .trim()
+                                      .isEmpty
+                                  ? null
+                                  : () {
+                                      openGoogleMaps(
+                                        context,
+                                        location
+                                            .toString(),
+                                      );
+                                    },
+                          icon: const Icon(
+                            Icons.map_outlined,
+                          ),
+                          label: const Text(
+                            'Open in Google Maps',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed:
+                              available
+                                  ? () {
+                                      contactLandlord(
+                                        context,
+                                      );
+                                    }
+                                  : null,
+                          icon: const Icon(
+                            Icons.message_outlined,
+                          ),
+                          label: const Text(
+                            'Contact Landlord',
+                          ),
+                        ),
+                      ),
                     ],
-                    const SizedBox(height: 20),
-                    OutlinedButton.icon(
-                      onPressed: location.trim().isEmpty
-                          ? null
-                          : () {
-                              openGoogleMaps(
-                                context,
-                                location,
-                              );
-                            },
-                      icon: const Icon(Icons.map_outlined),
-                      label: const Text(
-                        'Open in Google Maps',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      height: 52,
-                      child: FilledButton.icon(
-                        onPressed: available
-                            ? () => contactLandlord(context)
-                            : null,
-                        icon: const Icon(
-                          Icons.chat_bubble_outline,
-                        ),
-                        label: const Text(
-                          'Contact Landlord',
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               );
             }
           }
+
+          // ============================================================
+          // GOOGLE MAPS
+          // ============================================================
 
           Future<void> openGoogleMaps(
             BuildContext context,
@@ -1653,10 +1982,12 @@ jobs:
             try {
               final launched = await launchUrl(
                 uri,
-                mode: LaunchMode.externalApplication,
+                mode:
+                    LaunchMode.externalApplication,
               );
 
-              if (!launched && context.mounted) {
+              if (!launched &&
+                  context.mounted) {
                 showMessage(
                   context,
                   'Could not open Google Maps.',
@@ -1672,45 +2003,67 @@ jobs:
             }
           }
 
+          // ============================================================
+          // LANDLORD HOME
+          // ============================================================
+
           class LandlordHome extends StatefulWidget {
-            const LandlordHome({super.key});
+            const LandlordHome({
+              super.key,
+            });
 
             @override
             State<LandlordHome> createState() =>
                 _LandlordHomeState();
           }
 
-          class _LandlordHomeState extends State<LandlordHome> {
+          class _LandlordHomeState
+              extends State<LandlordHome> {
+            Future<void> logout() async {
+              await auth.signOut();
+            }
+
             @override
             Widget build(BuildContext context) {
-              final landlordId = auth.currentUser?.uid;
+              final user = auth.currentUser;
+
+              if (user == null) {
+                return const AuthScreen();
+              }
 
               return Scaffold(
                 appBar: AppBar(
-                  title: const Text('Landlord Dashboard'),
+                  title:
+                      const Text('Landlord Dashboard'),
                   actions: [
                     StreamBuilder<
-                        QuerySnapshot<Map<String, dynamic>>>(
+                        QuerySnapshot<
+                            Map<String, dynamic>>>(
                       stream: db
                           .collection('inquiries')
                           .where(
                             'landlordId',
-                            isEqualTo: landlordId,
+                            isEqualTo: user.uid,
                           )
                           .snapshots(),
-                      builder: (context, snapshot) {
-                        int unread = 0;
+                      builder: (
+                        context,
+                        snapshot,
+                      ) {
+                        final docs =
+                            snapshot.data?.docs ?? [];
 
-                        if (snapshot.hasData) {
-                          unread = snapshot.data!.docs.where((doc) {
-                            return doc.data()['isRead'] != true;
-                          }).length;
-                        }
+                        final unread = docs
+                            .where(
+                              (doc) =>
+                                  doc.data()['isRead'] !=
+                                  true,
+                            )
+                            .length;
 
                         return Stack(
                           children: [
                             IconButton(
-                              tooltip: 'Inquiries',
                               onPressed: () {
                                 Navigator.push(
                                   context,
@@ -1721,31 +2074,22 @@ jobs:
                                 );
                               },
                               icon: const Icon(
-                                Icons.mark_unread_chat_alt_outlined,
+                                Icons.message_outlined,
                               ),
                             ),
                             if (unread > 0)
                               Positioned(
-                                right: 7,
-                                top: 6,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 5,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red,
-                                    borderRadius:
-                                        BorderRadius.circular(10),
-                                  ),
+                                right: 5,
+                                top: 5,
+                                child: CircleAvatar(
+                                  radius: 9,
                                   child: Text(
-                                    unread > 99
-                                        ? '99+'
+                                    unread > 9
+                                        ? '9+'
                                         : '$unread',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
+                                    style:
+                                        const TextStyle(
+                                      fontSize: 9,
                                     ),
                                   ),
                                 ),
@@ -1755,92 +2099,90 @@ jobs:
                       },
                     ),
                     IconButton(
-                      tooltip: 'Logout',
-                      onPressed: () async {
-                        await auth.signOut();
-                      },
-                      icon: const Icon(Icons.logout),
+                      onPressed: logout,
+                      icon:
+                          const Icon(Icons.logout),
                     ),
                   ],
                 ),
+                floatingActionButton:
+                    FloatingActionButton.extended(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const AddPropertyScreen(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.add),
+                  label: const Text(
+                    'Add Property',
+                  ),
+                ),
                 body: StreamBuilder<
-                    QuerySnapshot<Map<String, dynamic>>>(
+                    QuerySnapshot<
+                        Map<String, dynamic>>>(
                   stream: db
                       .collection('properties')
                       .where(
                         'landlordId',
-                        isEqualTo: landlordId,
+                        isEqualTo: user.uid,
                       )
                       .snapshots(),
-                  builder: (context, snapshot) {
+                  builder: (
+                    context,
+                    snapshot,
+                  ) {
                     if (snapshot.connectionState ==
                         ConnectionState.waiting) {
                       return const Center(
-                        child: CircularProgressIndicator(),
+                        child:
+                            CircularProgressIndicator(),
                       );
                     }
 
                     if (snapshot.hasError) {
                       return Center(
                         child: Padding(
-                          padding: const EdgeInsets.all(24),
+                          padding:
+                              const EdgeInsets.all(
+                            24,
+                          ),
                           child: Text(
-                            'Could not load your properties.\n\n'
-                            '${snapshot.error}',
-                            textAlign: TextAlign.center,
+                            snapshot.error
+                                .toString(),
+                            textAlign:
+                                TextAlign.center,
                           ),
                         ),
                       );
                     }
 
-                    final docs = snapshot.data?.docs ?? [];
+                    final docs =
+                        snapshot.data?.docs ?? [];
 
-                    return Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(
-                            16,
-                            16,
-                            16,
-                            8,
-                          ),
-                          child: SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        const AddPropertyScreen(),
-                                  ),
-                                );
-                              },
-                              icon: const Icon(Icons.add),
-                              label: const Text(
-                                'Add Property',
-                              ),
-                            ),
-                          ),
+                    if (docs.isEmpty) {
+                      return const Center(
+                        child: Text(
+                          'No properties added yet.',
                         ),
-                        Expanded(
-                          child: docs.isEmpty
-                              ? const Center(
-                                  child: Text(
-                                    'You have not added any properties yet.',
-                                  ),
-                                )
-                              : ListView.builder(
-                                  padding: const EdgeInsets.all(12),
-                                  itemCount: docs.length,
-                                  itemBuilder: (context, index) {
-                                    return LandlordPropertyCard(
-                                      doc: docs[index],
-                                    );
-                                  },
-                                ),
-                        ),
-                      ],
+                      );
+                    }
+
+                    return ListView.builder(
+                      padding:
+                          const EdgeInsets.all(16),
+                      itemCount: docs.length,
+                      itemBuilder: (
+                        context,
+                        index,
+                      ) {
+                        return LandlordPropertyCard(
+                          doc: docs[index],
+                        );
+                      },
                     );
                   },
                 ),
@@ -1848,16 +2190,19 @@ jobs:
             }
           }
 
-          class AddPropertyScreen extends StatefulWidget {
-            final QueryDocumentSnapshot<Map<String, dynamic>>?
-                existing;
+          // ============================================================
+          // ADD / EDIT PROPERTY
+          // ============================================================
+
+          class AddPropertyScreen
+              extends StatefulWidget {
+            final QueryDocumentSnapshot<
+                Map<String, dynamic>>? existing;
 
             const AddPropertyScreen({
               super.key,
               this.existing,
             });
-
-            bool get isEditing => existing != null;
 
             @override
             State<AddPropertyScreen> createState() =>
@@ -1866,64 +2211,70 @@ jobs:
 
           class _AddPropertyScreenState
               extends State<AddPropertyScreen> {
-            final formKey = GlobalKey<FormState>();
+            final titleController =
+                TextEditingController();
 
-            late final TextEditingController titleController;
-            late final TextEditingController locationController;
-            late final TextEditingController rentController;
-            late final TextEditingController discountController;
-            late final TextEditingController bedroomsController;
-            late final TextEditingController bathroomsController;
-            late final TextEditingController descriptionController;
+            final locationController =
+                TextEditingController();
+
+            final rentController =
+                TextEditingController();
+
+            final discountController =
+                TextEditingController();
+
+            final bedroomsController =
+                TextEditingController();
+
+            final bathroomsController =
+                TextEditingController();
+
+            final descriptionController =
+                TextEditingController();
 
             String propertyType = 'Room';
             String furnished = 'Unfurnished';
             bool available = true;
-            bool saving = false;
+            bool loading = false;
 
             @override
             void initState() {
               super.initState();
 
-              final data = widget.existing?.data();
+              final existing =
+                  widget.existing?.data();
 
-              titleController = TextEditingController(
-                text: data?['title']?.toString() ?? '',
-              );
+              if (existing != null) {
+                titleController.text =
+                    '${existing['title'] ?? ''}';
 
-              locationController = TextEditingController(
-                text: data?['location']?.toString() ?? '',
-              );
+                locationController.text =
+                    '${existing['location'] ?? ''}';
 
-              rentController = TextEditingController(
-                text: data?['monthlyRent']?.toString() ?? '',
-              );
+                rentController.text =
+                    '${existing['monthlyRent'] ?? ''}';
 
-              discountController = TextEditingController(
-                text: data?['discount']?.toString() ?? '0',
-              );
+                discountController.text =
+                    '${existing['discount'] ?? ''}';
 
-              bedroomsController = TextEditingController(
-                text: data?['bedrooms']?.toString() ?? '0',
-              );
+                bedroomsController.text =
+                    '${existing['bedrooms'] ?? ''}';
 
-              bathroomsController = TextEditingController(
-                text: data?['bathrooms']?.toString() ?? '0',
-              );
+                bathroomsController.text =
+                    '${existing['bathrooms'] ?? ''}';
 
-              descriptionController = TextEditingController(
-                text: data?['description']?.toString() ?? '',
-              );
+                descriptionController.text =
+                    '${existing['description'] ?? ''}';
 
-              propertyType =
-                  data?['propertyType']?.toString() ?? 'Room';
+                propertyType =
+                    '${existing['propertyType'] ?? 'Room'}';
 
-              furnished =
-                  data?['furnished']?.toString() ?? 'Unfurnished';
+                furnished =
+                    '${existing['furnished'] ?? 'Unfurnished'}';
 
-              available = data?['available'] == false
-                  ? false
-                  : true;
+                available =
+                    existing['available'] != false;
+              }
             }
 
             @override
@@ -1939,67 +2290,92 @@ jobs:
             }
 
             Future<void> saveProperty() async {
-              if (!formKey.currentState!.validate()) {
-                return;
-              }
-
               final user = auth.currentUser;
 
               if (user == null) {
                 showMessage(
                   context,
-                  'Please login again.',
+                  'Please login first.',
+                );
+                return;
+              }
+
+              final title =
+                  titleController.text.trim();
+
+              final location =
+                  locationController.text.trim();
+
+              final rent =
+                  int.tryParse(
+                    rentController.text.trim(),
+                  );
+
+              final discount =
+                  int.tryParse(
+                    discountController.text.trim(),
+                  ) ??
+                  0;
+
+              final bedrooms =
+                  int.tryParse(
+                    bedroomsController.text.trim(),
+                  ) ??
+                  0;
+
+              final bathrooms =
+                  int.tryParse(
+                    bathroomsController.text.trim(),
+                  ) ??
+                  0;
+
+              final description =
+                  descriptionController.text.trim();
+
+              if (title.isEmpty ||
+                  location.isEmpty ||
+                  rent == null) {
+                showMessage(
+                  context,
+                  'Please enter title, location and valid rent.',
                 );
                 return;
               }
 
               setState(() {
-                saving = true;
+                loading = true;
               });
 
               try {
                 final data = {
-                  'title': titleController.text.trim(),
-                  'location': locationController.text.trim(),
-                  'monthlyRent':
-                      int.tryParse(
-                            rentController.text.trim(),
-                          ) ??
-                          0,
-                  'discount':
-                      int.tryParse(
-                            discountController.text.trim(),
-                          ) ??
-                          0,
-                  'bedrooms':
-                      int.tryParse(
-                            bedroomsController.text.trim(),
-                          ) ??
-                          0,
-                  'bathrooms':
-                      int.tryParse(
-                            bathroomsController.text.trim(),
-                          ) ??
-                          0,
-                  'description':
-                      descriptionController.text.trim(),
-                  'propertyType': propertyType,
+                  'title': title,
+                  'propertyType':
+                      propertyType,
+                  'location': location,
+                  'monthlyRent': rent,
+                  'discount': discount,
+                  'bedrooms': bedrooms,
+                  'bathrooms': bathrooms,
+                  'description': description,
                   'furnished': furnished,
                   'available': available,
                   'landlordId': user.uid,
+                  'updatedAt':
+                      FieldValue.serverTimestamp(),
                 };
 
-                if (widget.isEditing) {
+                if (widget.existing == null) {
+                  data['createdAt'] =
+                      FieldValue.serverTimestamp();
+
+                  await db
+                      .collection('properties')
+                      .add(data);
+                } else {
                   await db
                       .collection('properties')
                       .doc(widget.existing!.id)
                       .update(data);
-                } else {
-                  await db.collection('properties').add({
-                    ...data,
-                    'createdAt':
-                        FieldValue.serverTimestamp(),
-                  });
                 }
 
                 if (!mounted) return;
@@ -2015,7 +2391,7 @@ jobs:
               } finally {
                 if (mounted) {
                   setState(() {
-                    saving = false;
+                    loading = false;
                   });
                 }
               }
@@ -2023,302 +2399,328 @@ jobs:
 
             @override
             Widget build(BuildContext context) {
+              final editing =
+                  widget.existing != null;
+
               return Scaffold(
                 appBar: AppBar(
                   title: Text(
-                    widget.isEditing
+                    editing
                         ? 'Edit Property'
                         : 'Add Property',
                   ),
                 ),
-                body: Form(
-                  key: formKey,
-                  child: ListView(
+                body: SafeArea(
+                  child: SingleChildScrollView(
                     padding: const EdgeInsets.all(20),
-                    children: [
-                      TextFormField(
-                        controller: titleController,
-                        textCapitalization:
-                            TextCapitalization.sentences,
-                        decoration: const InputDecoration(
-                          labelText: 'Property title',
-                        ),
-                        validator: (value) {
-                          if (value == null ||
-                              value.trim().isEmpty) {
-                            return 'Enter a property title.';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: locationController,
-                        textCapitalization:
-                            TextCapitalization.words,
-                        decoration: const InputDecoration(
-                          labelText: 'Location',
-                          hintText: 'Kathmandu, Nepal',
-                        ),
-                        validator: (value) {
-                          if (value == null ||
-                              value.trim().isEmpty) {
-                            return 'Enter the location.';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        value: propertyType,
-                        decoration: const InputDecoration(
-                          labelText: 'Property type',
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'Room',
-                            child: Text('Room'),
+                    child: Column(
+                      children: [
+                        TextField(
+                          controller:
+                              titleController,
+                          decoration:
+                              const InputDecoration(
+                            labelText: 'Title',
+                            border:
+                                OutlineInputBorder(),
                           ),
-                          DropdownMenuItem(
-                            value: '1BHK',
-                            child: Text('1BHK'),
-                          ),
-                          DropdownMenuItem(
-                            value: '2BHK',
-                            child: Text('2BHK'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'Flat',
-                            child: Text('Flat'),
-                          ),
-                        ],
-                        onChanged: saving
-                            ? null
-                            : (value) {
-                                if (value != null) {
-                                  setState(() {
-                                    propertyType = value;
-                                  });
-                                }
-                              },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: rentController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Monthly rent',
-                          prefixText: 'Rs. ',
                         ),
-                        validator: (value) {
-                          final rent =
-                              int.tryParse(
-                            value?.trim() ?? '',
-                          );
-
-                          if (rent == null || rent < 0) {
-                            return 'Enter a valid rent.';
-                          }
-
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: discountController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Discount',
-                          prefixText: 'Rs. ',
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextFormField(
-                              controller: bedroomsController,
-                              keyboardType:
-                                  TextInputType.number,
-                              decoration:
-                                  const InputDecoration(
-                                labelText: 'Bedrooms',
-                              ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          value: propertyType,
+                          decoration:
+                              const InputDecoration(
+                            labelText:
+                                'Property Type',
+                            border:
+                                OutlineInputBorder(),
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'Room',
+                              child: Text('Room'),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextFormField(
-                              controller: bathroomsController,
-                              keyboardType:
-                                  TextInputType.number,
-                              decoration:
-                                  const InputDecoration(
-                                labelText: 'Bathrooms',
-                              ),
+                            DropdownMenuItem(
+                              value: '1BHK',
+                              child: Text('1BHK'),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        value: furnished,
-                        decoration: const InputDecoration(
-                          labelText: 'Furnished status',
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'Furnished',
-                            child: Text('Furnished'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'Unfurnished',
-                            child: Text('Unfurnished'),
-                          ),
-                        ],
-                        onChanged: saving
-                            ? null
-                            : (value) {
-                                if (value != null) {
+                            DropdownMenuItem(
+                              value: '2BHK',
+                              child: Text('2BHK'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'Flat',
+                              child: Text('Flat'),
+                            ),
+                          ],
+                          onChanged: loading
+                              ? null
+                              : (value) {
+                                  if (value ==
+                                      null) {
+                                    return;
+                                  }
+
                                   setState(() {
-                                    furnished = value;
+                                    propertyType =
+                                        value;
                                   });
-                                }
-                              },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: descriptionController,
-                        minLines: 4,
-                        maxLines: 8,
-                        maxLength: 2000,
-                        decoration: const InputDecoration(
-                          labelText: 'Description',
-                          alignLabelWithHint: true,
+                                },
                         ),
-                      ),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Available'),
-                        value: available,
-                        onChanged: saving
-                            ? null
-                            : (value) {
-                                setState(() {
-                                  available = value;
-                                });
-                              },
-                      ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        height: 52,
-                        child: FilledButton(
-                          onPressed:
-                              saving ? null : saveProperty,
-                          child: saving
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child:
-                                      CircularProgressIndicator(
-                                    strokeWidth: 2,
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller:
+                              locationController,
+                          decoration:
+                              const InputDecoration(
+                            labelText: 'Location',
+                            hintText:
+                                'Kathmandu, Nepal',
+                            border:
+                                OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: rentController,
+                          keyboardType:
+                              TextInputType.number,
+                          decoration:
+                              const InputDecoration(
+                            labelText:
+                                'Monthly Rent',
+                            border:
+                                OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller:
+                              discountController,
+                          keyboardType:
+                              TextInputType.number,
+                          decoration:
+                              const InputDecoration(
+                            labelText: 'Discount',
+                            border:
+                                OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller:
+                              bedroomsController,
+                          keyboardType:
+                              TextInputType.number,
+                          decoration:
+                              const InputDecoration(
+                            labelText: 'Bedrooms',
+                            border:
+                                OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller:
+                              bathroomsController,
+                          keyboardType:
+                              TextInputType.number,
+                          decoration:
+                              const InputDecoration(
+                            labelText: 'Bathrooms',
+                            border:
+                                OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller:
+                              descriptionController,
+                          maxLines: 5,
+                          decoration:
+                              const InputDecoration(
+                            labelText:
+                                'Description',
+                            border:
+                                OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          value: furnished,
+                          decoration:
+                              const InputDecoration(
+                            labelText: 'Furnished',
+                            border:
+                                OutlineInputBorder(),
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'Furnished',
+                              child:
+                                  Text('Furnished'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'Unfurnished',
+                              child:
+                                  Text('Unfurnished'),
+                            ),
+                          ],
+                          onChanged: loading
+                              ? null
+                              : (value) {
+                                  if (value ==
+                                      null) {
+                                    return;
+                                  }
+
+                                  setState(() {
+                                    furnished =
+                                        value;
+                                  });
+                                },
+                        ),
+                        SwitchListTile(
+                          contentPadding:
+                              EdgeInsets.zero,
+                          title: const Text(
+                            'Available',
+                          ),
+                          value: available,
+                          onChanged: loading
+                              ? null
+                              : (value) {
+                                  setState(() {
+                                    available =
+                                        value;
+                                  });
+                                },
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed:
+                                loading
+                                    ? null
+                                    : saveProperty,
+                            child: loading
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child:
+                                        CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Text(
+                                    editing
+                                        ? 'Update Property'
+                                        : 'Save Property',
                                   ),
-                                )
-                              : Text(
-                                  widget.isEditing
-                                      ? 'Save Changes'
-                                      : 'Add Property',
-                                ),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               );
             }
           }
 
-          class LandlordPropertyCard extends StatelessWidget {
-            final QueryDocumentSnapshot<Map<String, dynamic>> doc;
+          // ============================================================
+          // LANDLORD PROPERTY CARD
+          // ============================================================
+
+          class LandlordPropertyCard
+              extends StatelessWidget {
+            final QueryDocumentSnapshot<
+                Map<String, dynamic>> doc;
 
             const LandlordPropertyCard({
               super.key,
               required this.doc,
             });
 
+            Future<void> toggleAvailability(
+              BuildContext context,
+              bool value,
+            ) async {
+              try {
+                await db
+                    .collection('properties')
+                    .doc(doc.id)
+                    .update({
+                  'available': value,
+                  'updatedAt':
+                      FieldValue.serverTimestamp(),
+                });
+              } catch (e) {
+                if (!context.mounted) return;
+
+                showMessage(
+                  context,
+                  'Could not update property: $e',
+                );
+              }
+            }
+
             Future<void> deleteProperty(
               BuildContext context,
             ) async {
-              final confirmed = await showDialog<bool>(
+              final confirmed =
+                  await showDialog<bool>(
                 context: context,
                 builder: (dialogContext) {
                   return AlertDialog(
-                    title: const Text('Delete Property'),
+                    title: const Text(
+                      'Delete Property',
+                    ),
                     content: const Text(
                       'Are you sure you want to delete this property?',
                     ),
                     actions: [
                       TextButton(
                         onPressed: () {
-                          Navigator.pop(dialogContext, false);
+                          Navigator.pop(
+                            dialogContext,
+                            false,
+                          );
                         },
-                        child: const Text('Cancel'),
+                        child:
+                            const Text('Cancel'),
                       ),
                       FilledButton(
                         onPressed: () {
-                          Navigator.pop(dialogContext, true);
+                          Navigator.pop(
+                            dialogContext,
+                            true,
+                          );
                         },
-                        child: const Text('Delete'),
+                        child:
+                            const Text('Delete'),
                       ),
                     ],
                   );
                 },
               );
 
-              if (confirmed != true) return;
+              if (confirmed != true) {
+                return;
+              }
 
               try {
                 await db
                     .collection('properties')
                     .doc(doc.id)
                     .delete();
-
-                if (context.mounted) {
-                  showMessage(
-                    context,
-                    'Property deleted.',
-                  );
-                }
               } catch (e) {
-                if (context.mounted) {
-                  showMessage(
-                    context,
-                    'Could not delete property: $e',
-                  );
-                }
-              }
-            }
+                if (!context.mounted) return;
 
-            Future<void> toggleAvailability(
-              BuildContext context,
-            ) async {
-              final current =
-                  doc.data()['available'] == true;
-
-              try {
-                await db
-                    .collection('properties')
-                    .doc(doc.id)
-                    .update({
-                  'available': !current,
-                });
-              } catch (e) {
-                if (context.mounted) {
-                  showMessage(
-                    context,
-                    'Could not update availability: $e',
-                  );
-                }
+                showMessage(
+                  context,
+                  'Could not delete property: $e',
+                );
               }
             }
 
@@ -2327,92 +2729,98 @@ jobs:
               final data = doc.data();
 
               final title =
-                  (data['title'] ?? 'Property').toString();
+                  data['title'] ?? 'Property';
+
               final location =
-                  (data['location'] ?? '').toString();
+                  data['location'] ?? '';
+
               final rent =
-                  (data['monthlyRent'] ?? 0).toString();
+                  data['monthlyRent'] ?? 0;
+
               final available =
-                  data['available'] == true;
+                  data['available'] != false;
 
               return Card(
-                margin: const EdgeInsets.only(bottom: 12),
+                margin: const EdgeInsets.only(
+                  bottom: 12,
+                ),
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding:
+                      const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment:
                         CrossAxisAlignment.start,
                     children: [
+                      Text(
+                        title.toString(),
+                        style:
+                            const TextStyle(
+                          fontSize: 18,
+                          fontWeight:
+                              FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        location.toString(),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Rs. $rent / month',
+                      ),
+                      SwitchListTile(
+                        contentPadding:
+                            EdgeInsets.zero,
+                        title: Text(
+                          available
+                              ? 'Available'
+                              : 'Unavailable',
+                        ),
+                        value: available,
+                        onChanged: (value) {
+                          toggleAvailability(
+                            context,
+                            value,
+                          );
+                        },
+                      ),
                       Row(
                         children: [
                           Expanded(
-                            child: Text(
-                              title,
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        AddPropertyScreen(
+                                      existing: doc,
+                                    ),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(
+                                Icons.edit_outlined,
+                              ),
+                              label:
+                                  const Text('Edit'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                deleteProperty(
+                                  context,
+                                );
+                              },
+                              icon: const Icon(
+                                Icons.delete_outline,
+                              ),
+                              label: const Text(
+                                'Delete',
                               ),
                             ),
-                          ),
-                          _StatusChip(
-                            label: available
-                                ? 'Available'
-                                : 'Unavailable',
-                            positive: available,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(location),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Rs. $rent / month',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
-                        children: [
-                          OutlinedButton.icon(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      AddPropertyScreen(
-                                    existing: doc,
-                                  ),
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.edit),
-                            label: const Text('Edit'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: () {
-                              toggleAvailability(context);
-                            },
-                            icon: Icon(
-                              available
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
-                            ),
-                            label: Text(
-                              available
-                                  ? 'Hide'
-                                  : 'Show',
-                            ),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: () {
-                              deleteProperty(context);
-                            },
-                            icon: const Icon(
-                              Icons.delete_outline,
-                            ),
-                            label: const Text('Delete'),
                           ),
                         ],
                       ),
@@ -2423,64 +2831,94 @@ jobs:
             }
           }
 
-          class LandlordInquiriesScreen extends StatelessWidget {
-            const LandlordInquiriesScreen({super.key});
+          // ============================================================
+          // LANDLORD INQUIRIES
+          // ============================================================
+
+          class LandlordInquiriesScreen
+              extends StatelessWidget {
+            const LandlordInquiriesScreen({
+              super.key,
+            });
 
             @override
             Widget build(BuildContext context) {
-              final landlordId = auth.currentUser?.uid;
+              final user = auth.currentUser;
+
+              if (user == null) {
+                return const AuthScreen();
+              }
 
               return Scaffold(
                 appBar: AppBar(
-                  title: const Text('Inquiries'),
+                  title:
+                      const Text('Inquiries'),
                 ),
                 body: StreamBuilder<
-                    QuerySnapshot<Map<String, dynamic>>>(
+                    QuerySnapshot<
+                        Map<String, dynamic>>>(
                   stream: db
                       .collection('inquiries')
                       .where(
                         'landlordId',
-                        isEqualTo: landlordId,
+                        isEqualTo: user.uid,
                       )
                       .snapshots(),
-                  builder: (context, snapshot) {
+                  builder: (
+                    context,
+                    snapshot,
+                  ) {
                     if (snapshot.connectionState ==
                         ConnectionState.waiting) {
                       return const Center(
-                        child: CircularProgressIndicator(),
+                        child:
+                            CircularProgressIndicator(),
                       );
                     }
 
                     if (snapshot.hasError) {
                       return Center(
                         child: Padding(
-                          padding: const EdgeInsets.all(24),
+                          padding:
+                              const EdgeInsets.all(
+                            24,
+                          ),
                           child: Text(
-                            'Could not load inquiries.\n\n'
-                            '${snapshot.error}',
-                            textAlign: TextAlign.center,
+                            snapshot.error
+                                .toString(),
+                            textAlign:
+                                TextAlign.center,
                           ),
                         ),
                       );
                     }
 
-                    final docs = [
-                      ...(snapshot.data?.docs ?? []),
-                    ];
+                    final docs =
+                        snapshot.data?.docs ?? [];
 
-                    docs.sort((a, b) {
-                      final aTime = a.data()['createdAt'];
-                      final bTime = b.data()['createdAt'];
+                    final sorted =
+                        [...docs];
 
-                      if (aTime is Timestamp &&
-                          bTime is Timestamp) {
-                        return bTime.compareTo(aTime);
-                      }
+                    sorted.sort(
+                      (a, b) {
+                        final aTime =
+                            a.data()['createdAt']
+                                as Timestamp?;
 
-                      return 0;
-                    });
+                        final bTime =
+                            b.data()['createdAt']
+                                as Timestamp?;
 
-                    if (docs.isEmpty) {
+                        return (bTime?.millisecondsSinceEpoch ??
+                                0)
+                            .compareTo(
+                          aTime?.millisecondsSinceEpoch ??
+                              0,
+                        );
+                      },
+                    );
+
+                    if (sorted.isEmpty) {
                       return const Center(
                         child: Text(
                           'No inquiries yet.',
@@ -2489,11 +2927,15 @@ jobs:
                     }
 
                     return ListView.builder(
-                      padding: const EdgeInsets.all(12),
-                      itemCount: docs.length,
-                      itemBuilder: (context, index) {
+                      padding:
+                          const EdgeInsets.all(16),
+                      itemCount: sorted.length,
+                      itemBuilder: (
+                        context,
+                        index,
+                      ) {
                         return InquiryCard(
-                          doc: docs[index],
+                          doc: sorted[index],
                           landlordView: true,
                         );
                       },
@@ -2504,77 +2946,111 @@ jobs:
             }
           }
 
-          class CustomerInquiriesScreen extends StatelessWidget {
-            const CustomerInquiriesScreen({super.key});
+          // ============================================================
+          // CUSTOMER INQUIRIES
+          // ============================================================
+
+          class CustomerInquiriesScreen
+              extends StatelessWidget {
+            const CustomerInquiriesScreen({
+              super.key,
+            });
 
             @override
             Widget build(BuildContext context) {
-              final customerId = auth.currentUser?.uid;
+              final user = auth.currentUser;
+
+              if (user == null) {
+                return const AuthScreen();
+              }
 
               return Scaffold(
                 appBar: AppBar(
-                  title: const Text('My Inquiries'),
+                  title:
+                      const Text('My Inquiries'),
                 ),
                 body: StreamBuilder<
-                    QuerySnapshot<Map<String, dynamic>>>(
+                    QuerySnapshot<
+                        Map<String, dynamic>>>(
                   stream: db
                       .collection('inquiries')
                       .where(
                         'customerId',
-                        isEqualTo: customerId,
+                        isEqualTo: user.uid,
                       )
                       .snapshots(),
-                  builder: (context, snapshot) {
+                  builder: (
+                    context,
+                    snapshot,
+                  ) {
                     if (snapshot.connectionState ==
                         ConnectionState.waiting) {
                       return const Center(
-                        child: CircularProgressIndicator(),
+                        child:
+                            CircularProgressIndicator(),
                       );
                     }
 
                     if (snapshot.hasError) {
                       return Center(
                         child: Padding(
-                          padding: const EdgeInsets.all(24),
+                          padding:
+                              const EdgeInsets.all(
+                            24,
+                          ),
                           child: Text(
-                            'Could not load inquiries.\n\n'
-                            '${snapshot.error}',
-                            textAlign: TextAlign.center,
+                            snapshot.error
+                                .toString(),
+                            textAlign:
+                                TextAlign.center,
                           ),
                         ),
                       );
                     }
 
-                    final docs = [
-                      ...(snapshot.data?.docs ?? []),
-                    ];
+                    final docs =
+                        snapshot.data?.docs ?? [];
 
-                    docs.sort((a, b) {
-                      final aTime = a.data()['createdAt'];
-                      final bTime = b.data()['createdAt'];
+                    final sorted =
+                        [...docs];
 
-                      if (aTime is Timestamp &&
-                          bTime is Timestamp) {
-                        return bTime.compareTo(aTime);
-                      }
+                    sorted.sort(
+                      (a, b) {
+                        final aTime =
+                            a.data()['createdAt']
+                                as Timestamp?;
 
-                      return 0;
-                    });
+                        final bTime =
+                            b.data()['createdAt']
+                                as Timestamp?;
 
-                    if (docs.isEmpty) {
+                        return (bTime?.millisecondsSinceEpoch ??
+                                0)
+                            .compareTo(
+                          aTime?.millisecondsSinceEpoch ??
+                              0,
+                        );
+                      },
+                    );
+
+                    if (sorted.isEmpty) {
                       return const Center(
                         child: Text(
-                          'You have not sent any inquiries yet.',
+                          'You have not sent any inquiries.',
                         ),
                       );
                     }
 
                     return ListView.builder(
-                      padding: const EdgeInsets.all(12),
-                      itemCount: docs.length,
-                      itemBuilder: (context, index) {
+                      padding:
+                          const EdgeInsets.all(16),
+                      itemCount: sorted.length,
+                      itemBuilder: (
+                        context,
+                        index,
+                      ) {
                         return InquiryCard(
-                          doc: docs[index],
+                          doc: sorted[index],
                           landlordView: false,
                         );
                       },
@@ -2585,8 +3061,14 @@ jobs:
             }
           }
 
+          // ============================================================
+          // INQUIRY CARD
+          // ============================================================
+
           class InquiryCard extends StatelessWidget {
-            final QueryDocumentSnapshot<Map<String, dynamic>> doc;
+            final QueryDocumentSnapshot<
+                Map<String, dynamic>> doc;
+
             final bool landlordView;
 
             const InquiryCard({
@@ -2599,109 +3081,119 @@ jobs:
             Widget build(BuildContext context) {
               final data = doc.data();
 
-              final propertyTitle =
-                  (data['propertyTitle'] ?? 'Property')
-                      .toString();
+              final name = landlordView
+                  ? data['customerName'] ??
+                      'Customer'
+                  : data['landlordName'] ??
+                      'Landlord';
 
-              final person = landlordView
-                  ? (data['customerName'] ?? 'Customer')
-                      .toString()
-                  : (data['landlordName'] ?? 'Landlord')
-                      .toString();
+              final email = landlordView
+                  ? data['customerEmail'] ??
+                      ''
+                  : data['landlordEmail'] ??
+                      '';
+
+              final title =
+                  data['propertyTitle'] ??
+                      'Property';
+
+              final message =
+                  data['message'] ?? '';
 
               final status =
-                  (data['status'] ?? 'new').toString();
+                  data['status'] ?? 'new';
 
-              final isRead = data['isRead'] == true;
-
-              final createdAt = data['createdAt'];
+              final isRead =
+                  data['isRead'] == true;
 
               return Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                child: InkWell(
+                margin: const EdgeInsets.only(
+                  bottom: 12,
+                ),
+                child: ListTile(
                   onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => InquiryDetailsScreen(
+                        builder: (_) =>
+                            InquiryDetailsScreen(
                           doc: doc,
-                          landlordView: landlordView,
+                          landlordView:
+                              landlordView,
                         ),
                       ),
                     );
                   },
-                  borderRadius: BorderRadius.circular(12),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                propertyTitle,
-                                style: TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: isRead
-                                      ? FontWeight.w600
-                                      : FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            _StatusChip(
-                              label: status,
-                              positive: status == 'accepted',
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          landlordView
-                              ? 'From: $person'
-                              : 'To: $person',
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          (data['message'] ?? '').toString(),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            if (!isRead)
-                              const Padding(
-                                padding: EdgeInsets.only(right: 8),
-                                child: Icon(
-                                  Icons.circle,
-                                  size: 9,
-                                ),
-                              ),
-                            Expanded(
-                              child: Text(
-                                _formatDate(createdAt),
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall,
-                              ),
-                            ),
-                            const Icon(
-                              Icons.chevron_right,
-                            ),
-                          ],
-                        ),
-                      ],
+                  leading: CircleAvatar(
+                    child: Text(
+                      name
+                          .toString()
+                          .isEmpty
+                          ? '?'
+                          : name
+                              .toString()[0]
+                              .toUpperCase(),
                     ),
                   ),
+                  title: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          name.toString(),
+                          style: TextStyle(
+                            fontWeight: isRead
+                                ? FontWeight.normal
+                                : FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      _StatusChip(
+                        status:
+                            status.toString(),
+                      ),
+                    ],
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 4),
+                      Text(
+                        email.toString(),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        title.toString(),
+                        style:
+                            const TextStyle(
+                          fontWeight:
+                              FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        message.toString(),
+                        maxLines: 2,
+                        overflow:
+                            TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                  isThreeLine: true,
                 ),
               );
             }
           }
 
-          class InquiryDetailsScreen extends StatefulWidget {
-            final QueryDocumentSnapshot<Map<String, dynamic>> doc;
+          // ============================================================
+          // INQUIRY DETAILS
+          // ============================================================
+
+          class InquiryDetailsScreen
+              extends StatefulWidget {
+            final QueryDocumentSnapshot<
+                Map<String, dynamic>> doc;
+
             final bool landlordView;
 
             const InquiryDetailsScreen({
@@ -2716,14 +3208,18 @@ jobs:
           }
 
           class _InquiryDetailsScreenState
-              extends State<InquiryDetailsScreen> {
-            bool updating = false;
+              extends State<
+                  InquiryDetailsScreen> {
+            bool loading = false;
+
+            @override
+            void initState() {
+              super.initState();
+
+              markAsRead();
+            }
 
             Future<void> markAsRead() async {
-              if (widget.doc.data()['isRead'] == true) {
-                return;
-              }
-
               try {
                 await db
                     .collection('inquiries')
@@ -2738,7 +3234,7 @@ jobs:
               String status,
             ) async {
               setState(() {
-                updating = true;
+                loading = true;
               });
 
               try {
@@ -2750,247 +3246,258 @@ jobs:
                   'isRead': true,
                 });
 
-                if (mounted) {
-                  showMessage(
-                    context,
-                    'Inquiry status updated.',
-                  );
-                }
+                if (!mounted) return;
+
+                showMessage(
+                  context,
+                  'Inquiry status updated.',
+                );
               } catch (e) {
-                if (mounted) {
-                  showMessage(
-                    context,
-                    'Could not update inquiry: $e',
-                  );
-                }
+                if (!mounted) return;
+
+                showMessage(
+                  context,
+                  'Could not update status: $e',
+                );
               } finally {
                 if (mounted) {
                   setState(() {
-                    updating = false;
+                    loading = false;
                   });
                 }
               }
             }
 
             @override
-            void initState() {
-              super.initState();
-
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                markAsRead();
-              });
-            }
-
-            @override
             Widget build(BuildContext context) {
               final data = widget.doc.data();
 
-              final status =
-                  (data['status'] ?? 'new').toString();
-
-              final propertyTitle =
-                  (data['propertyTitle'] ?? 'Property')
-                      .toString();
-
               final customerName =
-                  (data['customerName'] ?? 'Customer')
-                      .toString();
+                  data['customerName'] ??
+                      'Customer';
 
               final customerEmail =
-                  (data['customerEmail'] ?? '').toString();
+                  data['customerEmail'] ??
+                      '';
 
               final landlordName =
-                  (data['landlordName'] ?? 'Landlord')
-                      .toString();
+                  data['landlordName'] ??
+                      'Landlord';
 
               final landlordEmail =
-                  (data['landlordEmail'] ?? '').toString();
+                  data['landlordEmail'] ??
+                      '';
+
+              final propertyTitle =
+                  data['propertyTitle'] ??
+                      'Property';
 
               final message =
-                  (data['message'] ?? '').toString();
+                  data['message'] ?? '';
+
+              final status =
+                  data['status'] ?? 'new';
+
+              final createdAt =
+                  data['createdAt'] as Timestamp?;
 
               return Scaffold(
                 appBar: AppBar(
-                  title: const Text('Inquiry Details'),
+                  title:
+                      const Text('Inquiry Details'),
                 ),
-                body: ListView(
+                body: SingleChildScrollView(
                   padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                    children: [
+                      _InfoSection(
+                        title: 'Property',
+                        child: Text(
+                          propertyTitle.toString(),
+                          style:
+                              const TextStyle(
+                            fontSize: 20,
+                            fontWeight:
+                                FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      _InfoSection(
+                        title: widget.landlordView
+                            ? 'Customer'
+                            : 'Landlord',
+                        child: Column(
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.landlordView
+                                  ? customerName
+                                      .toString()
+                                  : landlordName
+                                      .toString(),
+                              style:
+                                  const TextStyle(
+                                fontWeight:
+                                    FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(
+                              height: 4,
+                            ),
+                            Text(
+                              widget.landlordView
+                                  ? customerEmail
+                                      .toString()
+                                  : landlordEmail
+                                      .toString(),
+                            ),
+                          ],
+                        ),
+                      ),
+                      _InfoSection(
+                        title: 'Message',
+                        child: Text(
+                          message.toString(),
+                        ),
+                      ),
+                      _InfoSection(
+                        title: 'Status',
+                        child: _StatusChip(
+                          status:
+                              status.toString(),
+                        ),
+                      ),
+                      if (createdAt != null)
+                        _InfoSection(
+                          title: 'Sent',
+                          child: Text(
+                            _formatDate(
+                              createdAt,
+                            ),
+                          ),
+                        ),
+                      if (widget.landlordView) ...[
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Update Status',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight:
+                                FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final value in [
+                              'new',
+                              'accepted',
+                              'contacted',
+                              'closed',
+                            ])
+                              ChoiceChip(
+                                label:
+                                    Text(value),
+                                selected:
+                                    status ==
+                                        value,
+                                onSelected: loading
+                                    ? null
+                                    : (_) {
+                                        updateStatus(
+                                          value,
+                                        );
+                                      },
+                              ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            }
+          }
+
+          // ============================================================
+          // STATUS CHIP
+          // ============================================================
+
+          class _StatusChip extends StatelessWidget {
+            final String status;
+
+            const _StatusChip({
+              required this.status,
+            });
+
+            @override
+            Widget build(BuildContext context) {
+              final label = status
+                  .isEmpty
+                  ? 'new'
+                  : status;
+
+              return Chip(
+                label: Text(
+                  label,
+                  style:
+                      const TextStyle(
+                    fontSize: 12,
+                  ),
+                ),
+              );
+            }
+          }
+
+          // ============================================================
+          // INFO SECTION
+          // ============================================================
+
+          class _InfoSection extends StatelessWidget {
+            final String title;
+            final Widget child;
+
+            const _InfoSection({
+              required this.title,
+              required this.child,
+            });
+
+            @override
+            Widget build(BuildContext context) {
+              return Padding(
+                padding:
+                    const EdgeInsets.only(
+                  bottom: 18,
+                ),
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
                   children: [
                     Text(
-                      propertyTitle,
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
+                      title,
+                      style:
+                          const TextStyle(
+                        fontSize: 16,
+                        fontWeight:
+                            FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    _InfoSection(
-                      title: 'Inquiry',
-                      children: [
-                        _InfoRow(
-                          label: 'Status',
-                          value: status,
-                        ),
-                        _InfoRow(
-                          label: 'Date',
-                          value: _formatDate(
-                            data['createdAt'],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    _InfoSection(
-                      title: widget.landlordView
-                          ? 'Customer'
-                          : 'Landlord',
-                      children: [
-                        _InfoRow(
-                          label: 'Name',
-                          value: widget.landlordView
-                              ? customerName
-                              : landlordName,
-                        ),
-                        _InfoRow(
-                          label: 'Email',
-                          value: widget.landlordView
-                              ? customerEmail
-                              : landlordEmail,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    _InfoSection(
-                      title: 'Message',
-                      children: [
-                        Text(message),
-                      ],
-                    ),
-                    if (widget.landlordView) ...[
-                      const SizedBox(height: 24),
-                      const Text(
-                        'Update Status',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        value: [
-                          'new',
-                          'accepted',
-                          'contacted',
-                          'closed',
-                        ].contains(status)
-                            ? status
-                            : 'new',
-                        decoration: const InputDecoration(
-                          labelText: 'Inquiry status',
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'new',
-                            child: Text('New'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'accepted',
-                            child: Text('Accepted'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'contacted',
-                            child: Text('Contacted'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'closed',
-                            child: Text('Closed'),
-                          ),
-                        ],
-                        onChanged: updating
-                            ? null
-                            : (value) {
-                                if (value != null &&
-                                    value != status) {
-                                  updateStatus(value);
-                                }
-                              },
-                      ),
-                    ],
+                    const SizedBox(height: 8),
+                    child,
                   ],
                 ),
               );
             }
           }
 
-          class _StatusChip extends StatelessWidget {
-            final String label;
-            final bool positive;
-
-            const _StatusChip({
-              required this.label,
-              required this.positive,
-            });
-
-            @override
-            Widget build(BuildContext context) {
-              return Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 9,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  color: positive
-                      ? Colors.green.withOpacity(0.12)
-                      : Colors.grey.withOpacity(0.12),
-                ),
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: positive
-                        ? Colors.green.shade700
-                        : Colors.grey.shade700,
-                  ),
-                ),
-              );
-            }
-          }
-
-          class _InfoSection extends StatelessWidget {
-            final String title;
-            final List<Widget> children;
-
-            const _InfoSection({
-              required this.title,
-              required this.children,
-            });
-
-            @override
-            Widget build(BuildContext context) {
-              return Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      ...children,
-                    ],
-                  ),
-                ),
-              );
-            }
-          }
+          // ============================================================
+          // INFO ROW
+          // ============================================================
 
           class _InfoRow extends StatelessWidget {
             final String label;
@@ -3004,17 +3511,22 @@ jobs:
             @override
             Widget build(BuildContext context) {
               return Padding(
-                padding: const EdgeInsets.only(bottom: 10),
+                padding:
+                    const EdgeInsets.only(
+                  bottom: 8,
+                ),
                 child: Row(
                   crossAxisAlignment:
                       CrossAxisAlignment.start,
                   children: [
                     SizedBox(
-                      width: 125,
+                      width: 120,
                       child: Text(
                         label,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
+                        style:
+                            const TextStyle(
+                          fontWeight:
+                              FontWeight.bold,
                         ),
                       ),
                     ),
@@ -3027,26 +3539,28 @@ jobs:
             }
           }
 
-          String _formatDate(dynamic value) {
-            if (value is Timestamp) {
-              final date = value.toDate();
+          // ============================================================
+          // FORMAT DATE
+          // ============================================================
 
-              final day =
-                  date.day.toString().padLeft(2, '0');
-              final month =
-                  date.month.toString().padLeft(2, '0');
-              final year = date.year.toString();
+          String _formatDate(
+            Timestamp timestamp,
+          ) {
+            final date = timestamp.toDate();
 
-              final hour =
-                  date.hour.toString().padLeft(2, '0');
-              final minute =
-                  date.minute.toString().padLeft(2, '0');
-
-              return '$year-$month-$day $hour:$minute';
+            String twoDigits(int value) {
+              return value
+                  .toString()
+                  .padLeft(2, '0');
             }
 
-            return 'Just now';
+            return '${date.year}-${twoDigits(date.month)}-${twoDigits(date.day)} '
+                '${twoDigits(date.hour)}:${twoDigits(date.minute)}';
           }
+
+          // ============================================================
+          // MESSAGE HELPER
+          // ============================================================
 
           void showMessage(
             BuildContext context,
@@ -3061,20 +3575,24 @@ jobs:
               );
           }
           DART
+
+      # ============================================================
+      # 13. REMOVE DEFAULT TESTS
+      # ============================================================
       - name: Remove default tests
         run: |
           rm -rf build_app/test
 
       # ============================================================
-      # 13. GET DEPENDENCIES
+      # 14. FLUTTER PUB GET
       # ============================================================
-      - name: Get Flutter dependencies
+      - name: Flutter pub get
         working-directory: build_app
         run: |
           flutter pub get
 
       # ============================================================
-      # 14. FORMAT DART CODE
+      # 15. DART FORMAT
       # ============================================================
       - name: Format Dart code
         working-directory: build_app
@@ -3082,15 +3600,15 @@ jobs:
           dart format lib/main.dart
 
       # ============================================================
-      # 15. ANALYZE FLUTTER PROJECT
+      # 16. FLUTTER ANALYZE
       # ============================================================
-      - name: Analyze Flutter project
+      - name: Flutter analyze
         working-directory: build_app
         run: |
           flutter analyze --no-fatal-infos
 
       # ============================================================
-      # 16. BUILD RELEASE APK
+      # 17. BUILD RELEASE APK
       # ============================================================
       - name: Build release APK
         working-directory: build_app
@@ -3098,19 +3616,15 @@ jobs:
           flutter build apk --release
 
       # ============================================================
-      # 17. VERIFY APK
+      # 18. VERIFY AND UPLOAD APK
       # ============================================================
       - name: Verify APK
         run: |
           test -f build_app/build/app/outputs/flutter-apk/app-release.apk
           ls -lh build_app/build/app/outputs/flutter-apk/app-release.apk
 
-      # ============================================================
-      # 18. UPLOAD APK ARTIFACT
-      # ============================================================
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: KothaFinder-APK
           path: build_app/build/app/outputs/flutter-apk/app-release.apk
-          if-no-files-found: error
