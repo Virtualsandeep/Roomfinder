@@ -3061,6 +3061,9 @@ jobs:
               );
           }
           DART
+      - name: Remove default tests
+        run: |
+          rm -rf build_app/test
 
       # ============================================================
       # 13. GET DEPENDENCIES
